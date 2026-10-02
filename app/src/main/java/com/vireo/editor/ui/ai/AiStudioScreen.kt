@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -38,7 +39,9 @@ private enum class AiTab(val label: String, val icon: androidx.compose.ui.graphi
     IDEAS("Ideas", Icons.Filled.Lightbulb),
     SCRIPT("Script + Voice", Icons.Filled.RecordVoiceOver),
     TIMING("Best Time", Icons.Filled.Schedule),
-    TRENDS("Trends", Icons.Filled.TrendingUp)
+    TRENDS("Trends", Icons.Filled.TrendingUp),
+    THUMB("Thumbnail", Icons.Filled.Image),
+    MODELS("AI Models", Icons.Filled.Insights)
 }
 
 @Composable
@@ -140,6 +143,8 @@ fun AiStudioScreen(
                 AiTab.SCRIPT -> ScriptTab(vm, onUseVoiceover)
                 AiTab.TIMING -> TimingTab(vm)
                 AiTab.TRENDS -> TrendsTab(vm)
+                AiTab.THUMB -> ThumbnailTab(vm)
+                AiTab.MODELS -> ModelsTab()
             }
         }
     }
@@ -431,4 +436,159 @@ private fun FlowRowSimple(items: List<String>, color: Color) {
 private fun copy(ctx: Context, text: String) {
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("vireo", text))
+}
+
+
+@Composable
+private fun ThumbnailTab(vm: AiViewModel) {
+    var topic by remember { mutableStateOf("") }
+    var extra by remember { mutableStateOf("") }
+    var preset by remember { mutableStateOf(com.vireo.editor.ai.ThumbnailPrompts.PRESETS.first()) }
+    var aspect by remember { mutableStateOf("16:9") }
+    val image by vm.image.collectAsState()
+    val savedUri by vm.savedImageUri.collectAsState()
+    val imageModel by vm.imageModel.collectAsState()
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Field(topic, "What should the thumbnail show?", 2) { topic = it }
+        Spacer(Modifier.height(10.dp))
+
+        Text("Style", color = TextLo, fontSize = 12.sp)
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            com.vireo.editor.ai.ThumbnailPrompts.PRESETS.forEach { p ->
+                val sel = p.id == preset.id
+                Box(Modifier.clip(RoundedCornerShape(16.dp))
+                    .background(if (sel) Purple else Surface2)
+                    .border(1.dp, if (sel) Purple else Stroke, RoundedCornerShape(16.dp))
+                    .clickable { preset = p }.padding(horizontal = 13.dp, vertical = 7.dp)) {
+                    Text(p.label, color = if (sel) Color.White else TextLo, fontSize = 12.sp)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text("Aspect", color = TextLo, fontSize = 12.sp)
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("16:9", "9:16", "1:1", "4:5").forEach { a ->
+                val sel = a == aspect
+                Box(Modifier.clip(RoundedCornerShape(14.dp))
+                    .background(if (sel) Purple else Surface2)
+                    .border(1.dp, if (sel) Purple else Stroke, RoundedCornerShape(14.dp))
+                    .clickable { aspect = a }.padding(horizontal = 14.dp, vertical = 7.dp)) {
+                    Text(a, color = if (sel) Color.White else TextLo, fontSize = 12.sp)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Field(extra, "Extra details (optional): colours, text, mood", 1) { extra = it }
+
+        Spacer(Modifier.height(10.dp))
+        Text("Image model", color = TextLo, fontSize = 12.sp)
+        com.vireo.editor.ai.ImageAi.IMAGE_MODELS.forEach { m ->
+            Row(Modifier.fillMaxWidth().clickable { vm.setImageModel(m.id) }.padding(vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = m.id == imageModel, onClick = { vm.setImageModel(m.id) },
+                    colors = RadioButtonDefaults.colors(selectedColor = Purple, unselectedColor = Stroke))
+                Column {
+                    Text(m.label, color = TextHi, fontSize = 12.sp)
+                    Text(m.note, color = TextLo, fontSize = 10.sp)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        GradientButton("Generate Thumbnail", Modifier.fillMaxWidth(), enabled = topic.isNotBlank(),
+            icon = Icons.Filled.Image) { vm.generateThumbnail(topic, preset, aspect, extra) }
+
+        image?.let { bmp ->
+            Spacer(Modifier.height(16.dp))
+            androidx.compose.foundation.Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "Generated thumbnail",
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            )
+            Spacer(Modifier.height(10.dp))
+            GradientButton(if (savedUri != null) "Saved to Pictures/Vireo ✓" else "Save to Gallery",
+                Modifier.fillMaxWidth(), icon = Icons.Filled.Download) { vm.saveImage() }
+        }
+        Spacer(Modifier.height(40.dp))
+    }
+}
+
+@Composable
+private fun ModelsTab() {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Text("Which AI model should I use?", color = TextHi, fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        Text("All available with one OpenRouter key", color = TextLo, fontSize = 12.sp)
+        Spacer(Modifier.height(14.dp))
+
+        com.vireo.editor.ai.ModelsChart.ROWS.forEach { r ->
+            SectionCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(r.vendor, color = Purple, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            if (r.free) {
+                                Spacer(Modifier.width(6.dp))
+                                Box(Modifier.clip(RoundedCornerShape(6.dp))
+                                    .background(Cyan.copy(alpha = 0.2f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                    Text("FREE", color = Cyan, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            if (r.images) {
+                                Spacer(Modifier.width(6.dp))
+                                Box(Modifier.clip(RoundedCornerShape(6.dp))
+                                    .background(Accent.copy(alpha = 0.2f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                    Text("IMAGES", color = Accent, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(3.dp))
+                        Text(r.model, color = TextHi, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(3.dp))
+                        Text(r.bestFor, color = TextLo, fontSize = 11.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Row {
+                            Bars("Speed", r.speed)
+                            Spacer(Modifier.width(14.dp))
+                            Bars("Quality", r.quality)
+                        }
+                    }
+                    Text(r.costPerM, color = if (r.free) Cyan else TextLo, fontSize = 10.sp)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        Spacer(Modifier.height(8.dp))
+        SectionCard("Notes") {
+            com.vireo.editor.ai.ModelsChart.NOTES.forEach {
+                Text("• $it", color = TextLo, fontSize = 11.sp, modifier = Modifier.padding(vertical = 3.dp))
+            }
+        }
+        Spacer(Modifier.height(40.dp))
+    }
+}
+
+@Composable
+private fun Bars(label: String, value: Int) {
+    Column {
+        Text(label, color = TextLo, fontSize = 9.sp)
+        Spacer(Modifier.height(3.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            repeat(5) { i ->
+                Box(Modifier.size(width = 10.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(if (i < value) Purple else Stroke))
+            }
+        }
+    }
 }

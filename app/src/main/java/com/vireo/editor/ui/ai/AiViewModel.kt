@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vireo.editor.ai.*
 import com.vireo.editor.engine.TtsEngine
+import android.graphics.Bitmap
+import android.net.Uri
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -17,6 +19,7 @@ class AiViewModel(app: Application) : AndroidViewModel(app) {
     private val client = OpenRouterClient(config)
     private val ai = ContentAi(client)
     private val tts = TtsEngine(app)
+    private val imageAi = ImageAi(app, config)
 
     private val _busy = MutableStateFlow(false)
     val busy = _busy.asStateFlow()
@@ -46,6 +49,39 @@ class AiViewModel(app: Application) : AndroidViewModel(app) {
     val keySaved = _keySaved.asStateFlow()
 
     val region: String get() = TimeZone.getDefault().id
+
+    private val _image = MutableStateFlow<Bitmap?>(null)
+    val image = _image.asStateFlow()
+
+    private val _savedImageUri = MutableStateFlow<Uri?>(null)
+    val savedImageUri = _savedImageUri.asStateFlow()
+
+    private val _imageModel = MutableStateFlow(ImageAi.IMAGE_MODELS.first().id)
+    val imageModel = _imageModel.asStateFlow()
+
+    fun setImageModel(m: String) { _imageModel.value = m }
+
+    fun generateThumbnail(topic: String, preset: ThumbnailPrompts.Preset, aspect: String, extra: String) =
+        viewModelScope.launch {
+            _busy.value = true; _error.value = null; _savedImageUri.value = null
+            val prompt = ThumbnailPrompts.build(topic, preset, aspect, extra)
+            imageAi.generate(prompt, _imageModel.value, aspect)
+                .onSuccess { _image.value = it }
+                .onFailure { _error.value = it.message ?: "Image generation failed" }
+            _busy.value = false
+        }
+
+    fun generateImage(prompt: String, aspect: String) = viewModelScope.launch {
+        _busy.value = true; _error.value = null; _savedImageUri.value = null
+        imageAi.generate(prompt, _imageModel.value, aspect)
+            .onSuccess { _image.value = it }
+            .onFailure { _error.value = it.message ?: "Image generation failed" }
+        _busy.value = false
+    }
+
+    fun saveImage() {
+        _image.value?.let { bmp -> _savedImageUri.value = imageAi.saveToGallery(bmp) }
+    }
 
     fun setPlatform(p: Platform) { _platform.value = p }
     fun clearError() { _error.value = null }
