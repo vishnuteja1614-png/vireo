@@ -64,35 +64,43 @@ fun ExportScreen(
 
         SectionCard("Resolution") {
             ChipRow(
-                Resolution.entries.map { it.label },
-                Resolution.entries.indexOf(settings.resolution)
-            ) { i -> vm.updateSettings { it.copy(resolution = Resolution.entries[i]) } }
+                options = Resolution.entries.map { it.label },
+                selectedIndex = Resolution.entries.indexOf(settings.resolution),
+                onSelect = { i -> vm.updateSettings { s -> s.copy(resolution = Resolution.entries[i]) } }
+            )
         }
 
         Spacer(Modifier.height(12.dp))
 
         SectionCard("Frame rate") {
             val fpsOptions = listOf(24, 30, 60)
-            ChipRow(fpsOptions.map { "$it" }, fpsOptions.indexOf(settings.fps).coerceAtLeast(0)) { i ->
-                vm.updateSettings { it.copy(fps = fpsOptions[i]) }
-            }
+            ChipRow(
+                options = fpsOptions.map { "$it" },
+                selectedIndex = fpsOptions.indexOf(settings.fps).coerceAtLeast(0),
+                onSelect = { i -> vm.updateSettings { s -> s.copy(fps = fpsOptions[i]) } }
+            )
         }
 
         Spacer(Modifier.height(12.dp))
 
         SectionCard("Format") {
             ChipRow(
-                ContainerFormat.entries.map { it.label },
-                ContainerFormat.entries.indexOf(settings.format)
-            ) { i -> vm.updateSettings { it.copy(format = ContainerFormat.entries[i]) } }
+                options = ContainerFormat.entries.map { it.label },
+                selectedIndex = ContainerFormat.entries.indexOf(settings.format),
+                onSelect = { i -> vm.updateSettings { s -> s.copy(format = ContainerFormat.entries[i]) } }
+            )
         }
 
         Spacer(Modifier.height(12.dp))
 
         SectionCard("Quality") {
             com.vireo.editor.ui.LabeledSlider(
-                "Bitrate", settings.bitrateMbps.toFloat(), 4f..80f, "${settings.bitrateMbps} Mbps"
-            ) { vm.updateSettings { s -> s.copy(bitrateMbps = it.toInt()) } }
+                label = "Bitrate",
+                value = settings.bitrateMbps.toFloat(),
+                range = 4f..80f,
+                valueText = "${settings.bitrateMbps} Mbps",
+                onChange = { v -> vm.updateSettings { s -> s.copy(bitrateMbps = v.toInt()) } }
+            )
             Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Hardware acceleration", color = TextLo, fontSize = 13.sp)
