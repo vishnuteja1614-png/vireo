@@ -24,7 +24,6 @@ import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.OverlaySettings
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.ScaleAndRotateTransformation
-import androidx.media3.effect.StaticOverlaySettings
 import androidx.media3.effect.TextOverlay
 import androidx.media3.effect.TextureOverlay
 import androidx.media3.transformer.Composition
@@ -39,6 +38,7 @@ import androidx.media3.transformer.Transformer
 import androidx.media3.transformer.VideoEncoderSettings
 import com.google.common.collect.ImmutableList
 import com.vireo.editor.data.*
+import com.vireo.editor.data.TextOverlay as VTextOverlay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
@@ -257,7 +257,7 @@ class VideoExporter(private val context: Context) {
     }
 
     /** Media3 text overlay positioned from the project's fractional coordinates. */
-    private fun textOverlay(t: TextOverlay, outH: Int, clipStartMs: Long): TextureOverlay {
+    private fun textOverlay(t: VTextOverlay, outH: Int, clipStartMs: Long): TextureOverlay {
         val pxSize = (t.sizeSp * outH / 720f).toInt().coerceAtLeast(12)
         val span = SpannableString(t.text).apply {
             setSpan(ForegroundColorSpan(t.colorArgb), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -266,7 +266,7 @@ class VideoExporter(private val context: Context) {
         // Media3 overlay space is -1..1 with 0 at centre
         val x = (t.xFraction * 2f) - 1f
         val y = 1f - (t.yFraction * 2f)
-        val settings = StaticOverlaySettings.Builder()
+        val settings = OverlaySettings.Builder()
             .setOverlayFrameAnchor(0f, 0f)
             .setBackgroundFrameAnchor(x, y)
             .setAlphaScale(t.opacity.coerceIn(0f, 1f))

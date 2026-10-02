@@ -100,7 +100,7 @@ object Transitions {
 
         // ---- Blur family (8) ----
         add("blur_soft", "Soft Blur", TransitionFamily.BLUR, 600)
-        add("blur_heavy", "Heavy Blur", TransitionFamily.BLUR, 700, intensity = 2f)
+        add("blur_heavy", "Heavy Blur", TransitionFamily.BLUR, 700, i = 2f)
         add("motion_blur_h", "Motion Blur H", TransitionFamily.BLUR, 400, angle = 0)
         add("motion_blur_v", "Motion Blur V", TransitionFamily.BLUR, 400, angle = 90)
         add("radial_blur", "Radial Blur", TransitionFamily.BLUR, 650)
