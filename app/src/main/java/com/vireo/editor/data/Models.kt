@@ -30,6 +30,7 @@ data class Clip(
     val saturation: Float = 1f,
     val rotationDeg: Float = 0f,
     val transitionIn: TransitionType = TransitionType.NONE,
+    val transitionId: String = "none",
     val transitionMs: Long = 600L
 ) {
     val sourceDurationMs: Long get() = (trimEndMs - trimStartMs).coerceAtLeast(0L)
@@ -87,6 +88,7 @@ data class Project(
     val texts: List<TextOverlay> = emptyList(),
     val audio: List<AudioTrack> = emptyList(),
     val aspect: AspectRatio = AspectRatio.R16_9,
+    val captionStyleId: String = "hormozi",
     val updatedAt: Long = System.currentTimeMillis()
 ) {
     val totalDurationMs: Long get() = clips.sumOf { it.outputDurationMs }

@@ -32,6 +32,9 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --no-daemon
+
       - name: Run on Android 14 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -40,23 +43,14 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: |
-            gradle :app:assembleDebug --no-daemon
-            adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -n com.vireo.editor/.MainActivity
-            sleep 20
-            adb shell screencap -p /sdcard/launch.png
-            adb pull /sdcard/launch.png launch.png
-            # fail if the app crashed
-            if adb shell dumpsys activity | grep -q "com.vireo.editor"; then
-              echo "App is running"
-            else
-              echo "App not running"; exit 1
-            fi
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash scripts/emulator_check.sh
 
-      - name: Upload emulator screenshot
+      - name: Upload emulator artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: emulator-screenshot
-          path: launch.png
+          name: emulator-output
+          path: |
+            launch.png
+            logcat.txt

@@ -68,7 +68,8 @@ fun HomeScreen(
                 ToolButton(Icons.Filled.ContentCut, "Trim") { onQuickTool("trim") }
                 ToolButton(Icons.Filled.Merge, "Merge") { onQuickTool("merge") }
                 ToolButton(Icons.Filled.Compress, "Compress") { onQuickTool("compress") }
-                ToolButton(Icons.Filled.MusicNote, "Audio") { onQuickTool("audio") }
+                ToolButton(Icons.Filled.AutoAwesome, "AI") { onQuickTool("ai") }
+                ToolButton(Icons.Filled.ClosedCaption, "Captions") { onQuickTool("captions") }
             }
         }
 

@@ -118,7 +118,7 @@ fun ExportScreen(
         Spacer(Modifier.height(20.dp))
 
         when (val s = state) {
-            is ExportState.Running -> ProgressRing(s.percent)
+            is ExportState.Running -> ProgressRing(s.percent, s.stage)
             is ExportState.Done -> DoneCard(s) { onShare(s.uri) }
             is ExportState.Failed -> Text(s.message, color = Danger, fontSize = 13.sp)
             else -> Unit
@@ -145,7 +145,7 @@ fun ExportScreen(
 }
 
 @Composable
-private fun ProgressRing(percent: Int) {
+private fun ProgressRing(percent: Int, stage: String = "Exporting") {
     val animated by animateFloatAsState(percent / 100f, tween(400), label = "pr")
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.Center) {
@@ -158,7 +158,7 @@ private fun ProgressRing(percent: Int) {
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("$percent%", color = TextHi, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Text("Exporting", color = TextLo, fontSize = 11.sp)
+                Text(stage, color = TextLo, fontSize = 11.sp)
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -174,7 +174,7 @@ private fun DoneCard(s: ExportState.Done, onShare: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("Export complete", color = TextHi, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text("Saved to Movies/Vireo", color = TextLo, fontSize = 12.sp)
+                Text("Saved to Movies/Vireo · ${s.elapsedMs / 1000}s", color = TextLo, fontSize = 12.sp)
             }
             IconButton(onClick = onShare) { Icon(Icons.Filled.Share, "Share", tint = Purple) }
         }

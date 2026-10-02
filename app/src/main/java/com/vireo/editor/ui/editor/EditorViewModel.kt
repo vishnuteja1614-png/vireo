@@ -46,18 +46,34 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     // undo / redo
     private val undoStack = ArrayDeque<Project>()
     private val redoStack = ArrayDeque<Project>()
-    val canUndo get() = undoStack.isNotEmpty()
-    val canRedo get() = redoStack.isNotEmpty()
+
+    private val _canUndo = MutableStateFlow(false)
+    val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
+    private val _canRedo = MutableStateFlow(false)
+    val canRedo: StateFlow<Boolean> = _canRedo.asStateFlow()
+
+    private fun syncHistoryFlags() {
+        _canUndo.value = undoStack.isNotEmpty()
+        _canRedo.value = redoStack.isNotEmpty()
+    }
 
     private fun mutate(block: (Project) -> Project) {
         undoStack.addLast(_project.value)
         if (undoStack.size > 50) undoStack.removeFirst()
         redoStack.clear()
         _project.update { block(it).copy(updatedAt = System.currentTimeMillis()) }
+        syncHistoryFlags()
     }
 
-    fun undo() { undoStack.removeLastOrNull()?.let { redoStack.addLast(_project.value); _project.value = it } }
-    fun redo() { redoStack.removeLastOrNull()?.let { undoStack.addLast(_project.value); _project.value = it } }
+    fun undo() {
+        undoStack.removeLastOrNull()?.let { redoStack.addLast(_project.value); _project.value = it }
+        syncHistoryFlags()
+    }
+
+    fun redo() {
+        redoStack.removeLastOrNull()?.let { undoStack.addLast(_project.value); _project.value = it }
+        syncHistoryFlags()
+    }
 
     // ---- gallery / picker ----
     fun loadGallery(kind: MediaKind = MediaKind.VIDEO) = viewModelScope.launch {
@@ -140,6 +156,32 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun setSpeed(id: String, speed: Float) = updateClip(id) { it.copy(speed = speed.coerceIn(0.25f, 4f)) }
     fun setFilter(id: String, f: FilterPreset) = updateClip(id) { it.copy(filter = f) }
     fun setTransition(id: String, t: TransitionType, ms: Long) = updateClip(id) { it.copy(transitionIn = t, transitionMs = ms) }
+    fun setTransitionPreset(id: String, def: TransitionDef) =
+        updateClip(id) { it.copy(transitionId = def.id, transitionMs = def.defaultMs) }
+    fun setCaptionStyle(styleId: String) = mutate { it.copy(captionStyleId = styleId) }
+
+    /** Add an external audio file (e.g. an AI voiceover) to the project. */
+    fun addVoiceoverFile(file: java.io.File) {
+        val item = MediaItem(
+            uri = android.net.Uri.fromFile(file),
+            kind = MediaKind.AUDIO,
+            durationMs = 0L,
+            name = file.name,
+            sizeBytes = file.length()
+        )
+        addAudio(AudioTrack(media = item, isVoiceover = true))
+    }
+
+    /** Drop a batch of AI caption chunks onto the text track, evenly spaced. */
+    fun applyCaptionChunks(chunks: List<String>) {
+        if (chunks.isEmpty()) return
+        val total = _project.value.totalDurationMs.coerceAtLeast(1000L)
+        val per = total / chunks.size
+        val texts = chunks.mapIndexed { i, c ->
+            TextOverlay(text = c, startMs = i * per, endMs = (i + 1) * per, yFraction = 0.78f)
+        }
+        mutate { it.copy(texts = it.texts + texts) }
+    }
     fun setVolume(id: String, v: Float) = updateClip(id) { it.copy(volume = v.coerceIn(0f, 2f)) }
     fun setAspect(a: AspectRatio) = mutate { it.copy(aspect = a) }
     fun rename(name: String) = mutate { it.copy(name = name) }

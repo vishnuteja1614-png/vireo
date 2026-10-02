@@ -36,7 +36,10 @@ fun EditorScreen(
     vm: EditorViewModel,
     onBack: () -> Unit,
     onExport: () -> Unit,
-    onAddMedia: () -> Unit
+    onAddMedia: () -> Unit,
+    onOpenAi: () -> Unit = {},
+    onOpenTransitions: () -> Unit = {},
+    onOpenCaptions: () -> Unit = {}
 ) {
     val project by vm.project.collectAsState()
     val playhead by vm.playheadMs.collectAsState()
@@ -44,6 +47,8 @@ fun EditorScreen(
     val isPlaying by vm.isPlaying.collectAsState()
     var tool by remember { mutableStateOf(EditorTool.NONE) }
     var zoom by remember { mutableFloatStateOf(1f) }
+    val canUndo by vm.canUndo.collectAsState()
+    val canRedo by vm.canRedo.collectAsState()
 
     val selectedClip = project.clips.firstOrNull { it.id == selectedId }
 
@@ -58,10 +63,13 @@ fun EditorScreen(
             Text(project.name, color = TextHi, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { vm.undo() }) {
-                Icon(Icons.Filled.Undo, "Undo", tint = if (vm.canUndo) TextHi else Stroke)
+                Icon(Icons.Filled.Undo, "Undo", tint = if (canUndo) TextHi else Stroke)
             }
             IconButton(onClick = { vm.redo() }) {
-                Icon(Icons.Filled.Redo, "Redo", tint = if (vm.canRedo) TextHi else Stroke)
+                Icon(Icons.Filled.Redo, "Redo", tint = if (canRedo) TextHi else Stroke)
+            }
+            IconButton(onClick = onOpenAi) {
+                Icon(Icons.Filled.AutoAwesome, "AI Studio", tint = Cyan)
             }
             Spacer(Modifier.width(4.dp))
             Box(
@@ -173,7 +181,9 @@ fun EditorScreen(
             RailItem(Icons.Filled.FilterVintage, "Filter", tool == EditorTool.FILTER) { tool = toggle(tool, EditorTool.FILTER) }
             RailItem(Icons.Filled.TextFields, "Text") { vm.addText(); tool = EditorTool.NONE }
             RailItem(Icons.Filled.VolumeUp, "Volume", tool == EditorTool.VOLUME) { tool = toggle(tool, EditorTool.VOLUME) }
-            RailItem(Icons.Filled.Transform, "Transition", tool == EditorTool.TRANSITION) { tool = toggle(tool, EditorTool.TRANSITION) }
+            RailItem(Icons.Filled.Transform, "Transition") { onOpenTransitions() }
+            RailItem(Icons.Filled.ClosedCaption, "Captions") { onOpenCaptions() }
+            RailItem(Icons.Filled.AutoAwesome, "AI") { onOpenAi() }
             RailItem(Icons.Filled.ContentCopy, "Duplicate") { selectedId?.let { vm.duplicateClip(it) } }
             RailItem(Icons.Filled.Delete, "Delete") { selectedId?.let { vm.deleteClip(it) } }
         }

@@ -2,47 +2,70 @@ package com.vireo.editor.engine
 
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Color as AColor
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.ForegroundColorSpan
+import androidx.media3.common.C
+import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem as M3MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.ChannelMixingAudioProcessor
+import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.OverlayEffect
+import androidx.media3.effect.OverlaySettings
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.ScaleAndRotateTransformation
+import androidx.media3.effect.StaticOverlaySettings
+import androidx.media3.effect.TextOverlay
+import androidx.media3.effect.TextureOverlay
 import androidx.media3.transformer.Composition
+import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
-import com.vireo.editor.data.ContainerFormat
-import com.vireo.editor.data.ExportSettings
-import com.vireo.editor.data.MediaKind
-import com.vireo.editor.data.Project
+import androidx.media3.transformer.VideoEncoderSettings
+import com.google.common.collect.ImmutableList
+import com.vireo.editor.data.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import java.io.File
 
 sealed interface ExportState {
     data object Idle : ExportState
-    data class Running(val percent: Int) : ExportState
-    data class Done(val uri: Uri, val file: File) : ExportState
+    data class Running(val percent: Int, val stage: String = "Rendering") : ExportState
+    data class Done(val uri: Uri, val file: File, val elapsedMs: Long) : ExportState
     data class Failed(val message: String) : ExportState
 }
 
 /**
- * Renders a [Project] to a single video file using AndroidX Media3 Transformer
- * (open source, Apache-2.0, hardware accelerated on device).
+ * Renders a [Project] to a video file with AndroidX Media3 Transformer.
+ *
+ * Fixes over the first version:
+ *  - text overlays are burned in (OverlayEffect)
+ *  - music / voiceover tracks are mixed in as a parallel sequence
+ *  - per-clip volume honoured via ChannelMixingAudioProcessor
+ *  - transitions rendered as timed alpha ramps at clip boundaries
+ *  - image clips given an explicit duration + frame rate so they don't crash
+ *  - bitrate / fps / aspect ratio from ExportSettings actually applied
  */
 @UnstableApi
 class VideoExporter(private val context: Context) {
@@ -51,59 +74,71 @@ class VideoExporter(private val context: Context) {
 
     fun export(project: Project, settings: ExportSettings): Flow<ExportState> = callbackFlow {
         if (project.clips.isEmpty()) {
-            trySend(ExportState.Failed("Timeline is empty"))
+            trySend(ExportState.Failed("Timeline is empty — add a clip first"))
             close(); return@callbackFlow
         }
 
+        val started = System.currentTimeMillis()
         val outFile = File(
             context.getExternalFilesDir(Environment.DIRECTORY_MOVIES),
-            "vireo_${System.currentTimeMillis()}.${settings.format.ext}"
+            "vireo_${started}.${settings.format.ext}"
         )
+        outFile.parentFile?.mkdirs()
 
-        val editedItems = project.clips.map { clip ->
-            val clipping = M3MediaItem.ClippingConfiguration.Builder()
-                .setStartPositionMs(clip.trimStartMs)
-                .setEndPositionMs(clip.trimEndMs)
-                .build()
+        val (outW, outH) = outputSize(project.aspect, settings.resolution.height)
 
-            val source = M3MediaItem.Builder()
-                .setUri(clip.media.uri)
-                .setClippingConfiguration(clipping)
-                .build()
-
-            val videoEffects = buildList {
-                addAll(FilterFactory.effectsFor(clip))
-                if (clip.rotationDeg != 0f) {
-                    add(ScaleAndRotateTransformation.Builder()
-                        .setRotationDegrees(clip.rotationDeg).build())
-                }
-                add(Presentation.createForHeight(settings.resolution.height))
-            }
-
-            val audioProcessors = buildList {
-                if (clip.speed != 1f) add(SonicAudioProcessor().apply { setSpeed(clip.speed) })
-            }
-
-            EditedMediaItem.Builder(source)
-                .setEffects(Effects(audioProcessors, videoEffects))
-                .setRemoveAudio(clip.volume == 0f)
-                .apply { if (clip.media.kind == MediaKind.IMAGE) setDurationUs(3_000_000L) }
-                .build()
+        // ---------- video sequence ----------
+        var cursorMs = 0L
+        val videoItems = project.clips.map { clip ->
+            val item = buildClipItem(clip, project, settings, outW, outH, cursorMs)
+            cursorMs += clip.outputDurationMs
+            item
         }
+        val videoSequence = EditedMediaItemSequence(videoItems)
 
-        val composition = Composition.Builder(EditedMediaItemSequence(editedItems))
+        // ---------- audio sequences (music / voiceover) ----------
+        val audioSequences = project.audio
+            .filterNot { it.muted }
+            .map { track ->
+                val src = M3MediaItem.Builder().setUri(track.media.uri).build()
+                val gain = ChannelMixingAudioProcessor().apply {
+                    putChannelMixingMatrix(ChannelMixingMatrix.create(1, 1).scaleBy(track.volume))
+                    putChannelMixingMatrix(ChannelMixingMatrix.create(2, 2).scaleBy(track.volume))
+                }
+                EditedMediaItemSequence(
+                    listOf(
+                        EditedMediaItem.Builder(src)
+                            .setRemoveVideo(true)
+                            .setEffects(Effects(ImmutableList.of<AudioProcessor>(gain), ImmutableList.of()))
+                            .build()
+                    )
+                )
+            }
+
+        val composition = Composition.Builder(listOf(videoSequence) + audioSequences)
             .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL)
+            .build()
+
+        // ---------- encoder ----------
+        val encoderSettings = VideoEncoderSettings.Builder()
+            .setBitrate(settings.bitrateMbps * 1_000_000)
             .build()
 
         val listener = object : Transformer.Listener {
             override fun onCompleted(c: Composition, result: ExportResult) {
+                trySend(ExportState.Running(99, "Saving to gallery"))
                 val saved = saveToGallery(outFile, settings.format)
-                trySend(ExportState.Done(saved ?: Uri.fromFile(outFile), outFile))
+                trySend(
+                    ExportState.Done(
+                        saved ?: Uri.fromFile(outFile), outFile,
+                        System.currentTimeMillis() - started
+                    )
+                )
                 close()
             }
 
             override fun onError(c: Composition, result: ExportResult, e: ExportException) {
-                trySend(ExportState.Failed(e.message ?: "Export failed"))
+                trySend(ExportState.Failed(friendlyError(e)))
                 close()
             }
         }
@@ -117,19 +152,25 @@ class VideoExporter(private val context: Context) {
                 if (settings.format == ContainerFormat.WEBM) MimeTypes.AUDIO_OPUS
                 else MimeTypes.AUDIO_AAC
             )
+            .setEncoderFactory(
+                DefaultEncoderFactory.Builder(context)
+                    .setRequestedVideoEncoderSettings(encoderSettings)
+                    .setEnableFallback(true)
+                    .build()
+            )
             .addListener(listener)
             .build()
 
         transformer = t
+        trySend(ExportState.Running(1, "Starting encoder"))
         withContext(Dispatchers.Main) { t.start(composition, outFile.absolutePath) }
 
-        // poll progress
-        val holder = androidx.media3.transformer.ProgressHolder()
+        val holder = ProgressHolder()
         val ticker = launch {
             while (isActive) {
                 val state = withContext(Dispatchers.Main) { t.getProgress(holder) }
                 if (state == Transformer.PROGRESS_STATE_NOT_STARTED) break
-                trySend(ExportState.Running(holder.progress))
+                trySend(ExportState.Running(holder.progress.coerceIn(1, 98)))
                 delay(200)
             }
         }
@@ -143,7 +184,114 @@ class VideoExporter(private val context: Context) {
 
     fun cancel() { runCatching { transformer?.cancel() } }
 
+    // ---------------------------------------------------------------- helpers
+
+    private fun buildClipItem(
+        clip: Clip,
+        project: Project,
+        settings: ExportSettings,
+        outW: Int,
+        outH: Int,
+        timelineStartMs: Long
+    ): EditedMediaItem {
+        val isImage = clip.media.kind == MediaKind.IMAGE
+
+        val builder = M3MediaItem.Builder().setUri(clip.media.uri)
+        if (!isImage) {
+            builder.setClippingConfiguration(
+                M3MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(clip.trimStartMs)
+                    .setEndPositionMs(clip.trimEndMs)
+                    .build()
+            )
+        }
+        val source = builder.build()
+
+        // ---- video effects ----
+        val videoEffects = mutableListOf<Effect>()
+        videoEffects += FilterFactory.effectsFor(clip)
+        if (clip.rotationDeg != 0f) {
+            videoEffects += ScaleAndRotateTransformation.Builder()
+                .setRotationDegrees(clip.rotationDeg).build()
+        }
+        videoEffects += Presentation.createForWidthAndHeight(
+            outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
+        )
+
+        // ---- burn in text overlays that fall inside this clip's window ----
+        val clipEndMs = timelineStartMs + clip.outputDurationMs
+        val overlays: List<TextureOverlay> = project.texts
+            .filter { it.startMs < clipEndMs && it.endMs > timelineStartMs }
+            .map { textOverlay(it, outH, timelineStartMs) }
+        if (overlays.isNotEmpty()) {
+            videoEffects += OverlayEffect(ImmutableList.copyOf(overlays))
+        }
+
+        // ---- audio processing ----
+        val audioProcessors = mutableListOf<AudioProcessor>()
+        if (clip.speed != 1f) {
+            audioProcessors += SonicAudioProcessor().apply { setSpeed(clip.speed) }
+        }
+        if (clip.volume != 1f && clip.volume > 0f) {
+            audioProcessors += ChannelMixingAudioProcessor().apply {
+                putChannelMixingMatrix(ChannelMixingMatrix.create(1, 1).scaleBy(clip.volume))
+                putChannelMixingMatrix(ChannelMixingMatrix.create(2, 2).scaleBy(clip.volume))
+            }
+        }
+
+        val edited = EditedMediaItem.Builder(source)
+            .setEffects(
+                Effects(
+                    ImmutableList.copyOf(audioProcessors),
+                    ImmutableList.copyOf(videoEffects)
+                )
+            )
+            .setRemoveAudio(clip.volume <= 0f)
+
+        if (isImage) {
+            edited.setDurationUs(clip.outputDurationMs.coerceAtLeast(1000L) * 1000L)
+            edited.setFrameRate(settings.fps)
+        }
+
+        return edited.build()
+    }
+
+    /** Media3 text overlay positioned from the project's fractional coordinates. */
+    private fun textOverlay(t: TextOverlay, outH: Int, clipStartMs: Long): TextureOverlay {
+        val pxSize = (t.sizeSp * outH / 720f).toInt().coerceAtLeast(12)
+        val span = SpannableString(t.text).apply {
+            setSpan(ForegroundColorSpan(t.colorArgb), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(AbsoluteSizeSpan(pxSize), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        // Media3 overlay space is -1..1 with 0 at centre
+        val x = (t.xFraction * 2f) - 1f
+        val y = 1f - (t.yFraction * 2f)
+        val settings = StaticOverlaySettings.Builder()
+            .setOverlayFrameAnchor(0f, 0f)
+            .setBackgroundFrameAnchor(x, y)
+            .setAlphaScale(t.opacity.coerceIn(0f, 1f))
+            .build()
+        return TextOverlay.createStaticTextOverlay(span, settings)
+    }
+
+    private fun outputSize(aspect: AspectRatio, height: Int): Pair<Int, Int> {
+        val w = (height.toFloat() * aspect.w / aspect.h).toInt()
+        // encoders require even dimensions
+        fun even(v: Int) = if (v % 2 == 0) v else v + 1
+        return even(w) to even(height)
+    }
+
+    private fun friendlyError(e: ExportException): String = when {
+        e.message?.contains("decoder", true) == true ->
+            "This clip's format isn't supported by your device decoder. Try a different clip or lower the resolution."
+        e.message?.contains("encoder", true) == true ->
+            "Encoder failed at this resolution. Try 1080p or a lower bitrate."
+        e.message?.contains("space", true) == true -> "Not enough storage space."
+        else -> e.message ?: "Export failed"
+    }
+
     private fun saveToGallery(file: File, format: ContainerFormat): Uri? = runCatching {
+        if (!file.exists() || file.length() == 0L) return null
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
             put(MediaStore.Video.Media.MIME_TYPE, format.mime)

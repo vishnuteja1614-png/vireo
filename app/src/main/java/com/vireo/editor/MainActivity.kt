@@ -25,7 +25,12 @@ import com.vireo.editor.data.Project
 import com.vireo.editor.ui.editor.EditorScreen
 import com.vireo.editor.ui.editor.EditorViewModel
 import com.vireo.editor.ui.export.ExportScreen
+import com.vireo.editor.ui.ai.AiStudioScreen
+import com.vireo.editor.ui.ai.AiViewModel
+import com.vireo.editor.ui.editor.CaptionStylePickerScreen
+import com.vireo.editor.ui.editor.TransitionPickerScreen
 import com.vireo.editor.ui.home.HomeScreen
+import com.vireo.editor.ui.settings.SettingsScreen
 import com.vireo.editor.ui.picker.MediaPickerScreen
 import com.vireo.editor.ui.theme.Bg
 import com.vireo.editor.ui.theme.VireoTheme
@@ -52,6 +57,7 @@ class MainActivity : ComponentActivity() {
 fun VireoApp() {
     val nav = rememberNavController()
     val vm: EditorViewModel = viewModel()
+    val aiVm: AiViewModel = viewModel()
     val context = androidx.compose.ui.platform.LocalContext.current
 
     val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
@@ -76,7 +82,14 @@ fun VireoApp() {
                 recent = recent,
                 onNewProject = { vm.loadGallery(MediaKind.VIDEO); nav.navigate("picker") },
                 onOpenProject = { nav.navigate("editor") },
-                onQuickTool = { vm.loadGallery(MediaKind.VIDEO); nav.navigate("picker") }
+                onQuickTool = { tool ->
+                    when (tool) {
+                        "ai" -> nav.navigate("ai")
+                        "settings" -> nav.navigate("settings")
+                        "captions" -> nav.navigate("captions")
+                        else -> { vm.loadGallery(MediaKind.VIDEO); nav.navigate("picker") }
+                    }
+                }
             )
         }
         composable("picker") {
@@ -100,7 +113,42 @@ fun VireoApp() {
                     nav.popBackStack("home", inclusive = false)
                 },
                 onExport = { nav.navigate("export") },
-                onAddMedia = { vm.loadGallery(MediaKind.VIDEO); nav.navigate("picker") }
+                onAddMedia = { vm.loadGallery(MediaKind.VIDEO); nav.navigate("picker") },
+                onOpenAi = { nav.navigate("ai") },
+                onOpenTransitions = { nav.navigate("transitions") },
+                onOpenCaptions = { nav.navigate("captions") }
+            )
+        }
+        composable("ai") {
+            AiStudioScreen(
+                vm = aiVm,
+                onBack = { nav.popBackStack() },
+                onOpenSettings = { nav.navigate("settings") },
+                onUseVoiceover = { file ->
+                    vm.addVoiceoverFile(file)
+                    nav.popBackStack()
+                }
+            )
+        }
+        composable("settings") {
+            SettingsScreen(vm = aiVm, onBack = { nav.popBackStack() })
+        }
+        composable("transitions") {
+            val selected = project.clips.firstOrNull { it.id == vm.selectedClipId.value }
+            TransitionPickerScreen(
+                selectedId = selected?.transitionId ?: "none",
+                onPick = { def ->
+                    vm.selectedClipId.value?.let { vm.setTransitionPreset(it, def) }
+                    nav.popBackStack()
+                },
+                onBack = { nav.popBackStack() }
+            )
+        }
+        composable("captions") {
+            CaptionStylePickerScreen(
+                selectedId = project.captionStyleId,
+                onPick = { st -> vm.setCaptionStyle(st.id); nav.popBackStack() },
+                onBack = { nav.popBackStack() }
             )
         }
         composable("export") {
