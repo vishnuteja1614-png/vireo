@@ -23,6 +23,21 @@ class AiConfig(context: Context) {
         get() = prefs.getString("groq_key", "") ?: ""
         set(v) = prefs.edit { putString("groq_key", v.trim()) }
 
+    /** Which backend to use. Puter is the default so the app works with zero setup. */
+    var backend: AiBackend
+        get() = runCatching { AiBackend.valueOf(prefs.getString("backend", AiBackend.PUTER.name)!!) }
+            .getOrDefault(AiBackend.PUTER)
+        set(v) = prefs.edit { putString("backend", v.name) }
+
+    var puterModel: String
+        get() = prefs.getString("puter_model", PuterClient.DEFAULT_MODEL) ?: PuterClient.DEFAULT_MODEL
+        set(v) = prefs.edit { putString("puter_model", v) }
+
+    var imageModel: String
+        get() = prefs.getString("image_model", ImageAi.IMAGE_MODELS.first().id)
+            ?: ImageAi.IMAGE_MODELS.first().id
+        set(v) = prefs.edit { putString("image_model", v) }
+
     var model: String
         get() = prefs.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
         set(v) = prefs.edit { putString("model", v) }

@@ -33,7 +33,7 @@ data class VideoIdea(
     val whyItWorks: String
 )
 
-class ContentAi(private val client: OpenRouterClient) {
+class ContentAi(private val client: AiRouter) {
 
     private val persona = """
         You are an elite social-media growth strategist and video editor's assistant.

@@ -16,10 +16,9 @@ import java.util.TimeZone
 class AiViewModel(app: Application) : AndroidViewModel(app) {
 
     val config = AiConfig(app)
-    private val client = OpenRouterClient(config)
-    private val ai = ContentAi(client)
+    val router = AiRouter(app, config)
+    private val ai = ContentAi(router)
     private val tts = TtsEngine(app)
-    private val imageAi = ImageAi(app, config)
 
     private val _busy = MutableStateFlow(false)
     val busy = _busy.asStateFlow()
@@ -48,6 +47,37 @@ class AiViewModel(app: Application) : AndroidViewModel(app) {
     private val _keySaved = MutableStateFlow(config.hasAnyKey)
     val keySaved = _keySaved.asStateFlow()
 
+    // ---- backend / Puter account ----
+    private val _backend = MutableStateFlow(config.backend)
+    val backend = _backend.asStateFlow()
+
+    private val _puterUser = MutableStateFlow<String?>(null)
+    val puterUser = _puterUser.asStateFlow()
+
+    /** True when the user can actually make AI calls right now. */
+    val aiAvailable: Boolean
+        get() = config.backend == AiBackend.PUTER || config.hasAnyKey
+
+    fun setBackend(b: AiBackend) { config.backend = b; _backend.value = b }
+    fun setPuterModel(m: String) { config.puterModel = m }
+
+    fun refreshPuterUser() = viewModelScope.launch {
+        _puterUser.value = router.puter.currentUser()
+    }
+
+    fun signInToPuter() = viewModelScope.launch {
+        _busy.value = true; _error.value = null
+        router.puter.signIn()
+            .onSuccess { _puterUser.value = it }
+            .onFailure { _error.value = it.message ?: "Puter sign-in failed" }
+        _busy.value = false
+    }
+
+    fun signOutOfPuter() = viewModelScope.launch {
+        router.puter.signOut()
+        _puterUser.value = null
+    }
+
     val region: String get() = TimeZone.getDefault().id
 
     private val _image = MutableStateFlow<Bitmap?>(null)
@@ -56,16 +86,16 @@ class AiViewModel(app: Application) : AndroidViewModel(app) {
     private val _savedImageUri = MutableStateFlow<Uri?>(null)
     val savedImageUri = _savedImageUri.asStateFlow()
 
-    private val _imageModel = MutableStateFlow(ImageAi.IMAGE_MODELS.first().id)
+    private val _imageModel = MutableStateFlow(config.imageModel)
     val imageModel = _imageModel.asStateFlow()
 
-    fun setImageModel(m: String) { _imageModel.value = m }
+    fun setImageModel(m: String) { _imageModel.value = m; config.imageModel = m }
 
     fun generateThumbnail(topic: String, preset: ThumbnailPrompts.Preset, aspect: String, extra: String) =
         viewModelScope.launch {
             _busy.value = true; _error.value = null; _savedImageUri.value = null
             val prompt = ThumbnailPrompts.build(topic, preset, aspect, extra)
-            imageAi.generate(prompt, _imageModel.value, aspect)
+            router.image(prompt, aspect)
                 .onSuccess { _image.value = it }
                 .onFailure { _error.value = it.message ?: "Image generation failed" }
             _busy.value = false
@@ -73,14 +103,14 @@ class AiViewModel(app: Application) : AndroidViewModel(app) {
 
     fun generateImage(prompt: String, aspect: String) = viewModelScope.launch {
         _busy.value = true; _error.value = null; _savedImageUri.value = null
-        imageAi.generate(prompt, _imageModel.value, aspect)
+        router.image(prompt, aspect)
             .onSuccess { _image.value = it }
             .onFailure { _error.value = it.message ?: "Image generation failed" }
         _busy.value = false
     }
 
     fun saveImage() {
-        _image.value?.let { bmp -> _savedImageUri.value = imageAi.saveToGallery(bmp) }
+        _image.value?.let { bmp -> _savedImageUri.value = router.saveImage(bmp) }
     }
 
     fun setPlatform(p: Platform) { _platform.value = p }
@@ -127,5 +157,5 @@ class AiViewModel(app: Application) : AndroidViewModel(app) {
         _busy.value = false
     }
 
-    override fun onCleared() { tts.release(); super.onCleared() }
+    override fun onCleared() { tts.release(); router.release(); super.onCleared() }
 }

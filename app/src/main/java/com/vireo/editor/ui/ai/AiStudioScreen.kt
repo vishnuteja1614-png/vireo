@@ -56,6 +56,10 @@ fun AiStudioScreen(
     val busy by vm.busy.collectAsState()
     val error by vm.error.collectAsState()
     val keySaved by vm.keySaved.collectAsState()
+    val backend by vm.backend.collectAsState()
+    val puterUser by vm.puterUser.collectAsState()
+    val aiReady = backend == com.vireo.editor.ai.AiBackend.PUTER || keySaved
+    LaunchedEffect(Unit) { vm.refreshPuterUser() }
 
     Column(Modifier.fillMaxSize().background(Bg)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
@@ -68,8 +72,18 @@ fun AiStudioScreen(
             Spacer(Modifier.width(8.dp))
             Text("AI Studio", color = TextHi, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Key, "AI keys", tint = if (keySaved) Cyan else Accent) }
+            IconButton(onClick = onOpenSettings) {
+                Icon(Icons.Filled.Key, "AI provider", tint = if (aiReady) Cyan else Accent)
+            }
         }
+
+        Text(
+            if (backend == com.vireo.editor.ai.AiBackend.PUTER)
+                (if (puterUser.isNullOrBlank()) "Puter · not signed in" else "Puter · ${'$'}puterUser")
+            else "Own API key",
+            color = TextLo, fontSize = 10.sp,
+            modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
+        )
 
         // platform selector
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
@@ -108,14 +122,14 @@ fun AiStudioScreen(
             }
         }
 
-        if (!keySaved && tab != AiTab.TIMING) {
+        if (!aiReady && tab != AiTab.TIMING) {
             Spacer(Modifier.height(10.dp))
             Surface(color = Accent.copy(alpha = 0.12f), shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Info, null, tint = Accent, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Add an OpenRouter key to unlock AI. Best Time works offline.",
+                    Text("Choose an AI provider in Settings. Puter is free. Best Time works offline.",
                         color = Accent, fontSize = 12.sp, modifier = Modifier.weight(1f))
                     Text("Add", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp,
                         modifier = Modifier.clickable { onOpenSettings() })

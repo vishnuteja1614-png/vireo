@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://js.puter.com/v2/"></script>
+<style>
+  html,body{margin:0;padding:0;background:#0A0A0C;color:#E9E9F0;
+    font-family:system-ui,-apple-system,Roboto,sans-serif}
+  #status{padding:18px;font-size:14px;line-height:1.5}
+  .btn{display:inline-block;margin-top:14px;padding:12px 22px;border-radius:24px;
+    background:linear-gradient(90deg,#8B5CF6,#22D3EE);color:#fff;font-weight:600;
+    text-decoration:none;border:none;font-size:15px}
+</style>
+</head>
+<body>
+<div id="status">Connecting to Puter…</div>
+
+<script>
+function report(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+function send(id, ok, payload) {
+  if (window.Vireo && window.Vireo.onResult) {
+    window.Vireo.onResult(id, ok, String(payload == null ? '' : payload));
+  }
+}
+
+// Tell the app the bridge script finished loading
+window.addEventListener('load', function () {
+  var ready = (typeof puter !== 'undefined');
+  report(ready ? 'Puter connected.' : 'Could not load Puter. Check your internet connection.');
+  if (window.Vireo && window.Vireo.onReady) window.Vireo.onReady(ready);
+});
+
+// ---- chat completion ----
+async function vireoChat(id, model, system, user) {
+  try {
+    if (typeof puter === 'undefined') { send(id, false, 'Puter library not loaded'); return; }
+    const prompt = system ? (system + '\n\n' + user) : user;
+    const resp = await puter.ai.chat(prompt, { model: model });
+    let text = '';
+    if (typeof resp === 'string') text = resp;
+    else if (resp && resp.message && resp.message.content) {
+      const c = resp.message.content;
+      text = (typeof c === 'string') ? c
+           : (Array.isArray(c) ? c.map(p => p.text || '').join('') : JSON.stringify(c));
+    } else if (resp && resp.text) text = resp.text;
+    else text = JSON.stringify(resp);
+    send(id, true, text);
+  } catch (e) {
+    send(id, false, (e && e.message) ? e.message : String(e));
+  }
+}
+
+// ---- image generation (returns a data URL) ----
+async function vireoImage(id, prompt) {
+  try {
+    if (typeof puter === 'undefined') { send(id, false, 'Puter library not loaded'); return; }
+    const img = await puter.ai.txt2img(prompt, true);
+    const src = img && img.src ? img.src : String(img);
+    if (src.indexOf('data:') === 0) { send(id, true, src); return; }
+    // convert a remote url into a data url so Kotlin can decode it directly
+    const r = await fetch(src);
+    const blob = await r.blob();
+    const reader = new FileReader();
+    reader.onloadend = function () { send(id, true, reader.result); };
+    reader.onerror = function () { send(id, false, 'Could not read generated image'); };
+    reader.readAsDataURL(blob);
+  } catch (e) {
+    send(id, false, (e && e.message) ? e.message : String(e));
+  }
+}
+
+// ---- auth ----
+async function vireoSignIn(id) {
+  try {
+    await puter.auth.signIn();
+    const u = await puter.auth.getUser();
+    send(id, true, (u && u.username) ? u.username : 'signed-in');
+  } catch (e) {
+    send(id, false, (e && e.message) ? e.message : String(e));
+  }
+}
+
+async function vireoWhoAmI(id) {
+  try {
+    const signed = puter.auth.isSignedIn();
+    if (!signed) { send(id, true, ''); return; }
+    const u = await puter.auth.getUser();
+    send(id, true, (u && u.username) ? u.username : '');
+  } catch (e) { send(id, true, ''); }
+}
+
+function vireoSignOut(id) {
+  try { puter.auth.signOut(); send(id, true, 'ok'); }
+  catch (e) { send(id, false, String(e)); }
+}
+</script>
+</body>
+</html>
