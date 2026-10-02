@@ -103,7 +103,7 @@ class PuterClient(private val context: Context) {
     private fun esc(s: String): String = org.json.JSONObject.quote(s)
 
     suspend fun chat(system: String, user: String, model: String = DEFAULT_MODEL): Result<String> =
-        call { id -> "vireoChat(${esc(id)}, ${esc(model)}, ${esc(system)}, ${esc(user)});" }
+        call(js = { id -> "vireoChat(${esc(id)}, ${esc(model)}, ${esc(system)}, ${esc(user)});" })
 
     suspend fun image(prompt: String): Result<Bitmap> =
         call({ id -> "vireoImage(${esc(id)}, ${esc(prompt)});" }).mapCatching { dataUrl ->
