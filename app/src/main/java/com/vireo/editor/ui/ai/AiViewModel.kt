@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vireo.editor.ai.*
 import com.vireo.editor.engine.TtsEngine
+import com.vireo.editor.engine.EdgeTts
+import com.vireo.editor.engine.EdgeVoices
 import android.graphics.Bitmap
 import android.net.Uri
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +21,28 @@ class AiViewModel(app: Application) : AndroidViewModel(app) {
     val router = AiRouter(app, config)
     private val ai = ContentAi(router)
     private val tts = TtsEngine(app)
+    private val edgeTts = EdgeTts()
+
+    /** Selected neural voice id, persisted so a creator keeps their voice. */
+    private val _voiceId = MutableStateFlow(config.voiceId)
+    val voiceId = _voiceId.asStateFlow()
+
+    private val _voiceRate = MutableStateFlow(0)
+    val voiceRate = _voiceRate.asStateFlow()
+
+    private val _voicePitch = MutableStateFlow(0)
+    val voicePitch = _voicePitch.asStateFlow()
+
+    /** Set when a render fell back to the robotic on-device engine. */
+    private val _voiceNotice = MutableStateFlow<String?>(null)
+    val voiceNotice = _voiceNotice.asStateFlow()
+
+    val voices = EdgeVoices.ALL
+    val featuredVoices = EdgeVoices.featured()
+
+    fun selectVoice(id: String) { _voiceId.value = id; config.voiceId = id }
+    fun setVoiceRate(v: Int) { _voiceRate.value = v.coerceIn(-50, 100) }
+    fun setVoicePitch(v: Int) { _voicePitch.value = v.coerceIn(-50, 50) }
 
     private val _busy = MutableStateFlow(false)
     val busy = _busy.asStateFlow()
@@ -147,14 +171,44 @@ class AiViewModel(app: Application) : AndroidViewModel(app) {
     fun offlineSlots() = UploadTiming.slotsFor(_platform.value)
     fun nextSlot() = UploadTiming.nextBest(_platform.value)
 
-    /** Narrate text with the on-device TTS engine. */
+    /**
+     * Narrate [text] with the selected Microsoft neural voice.
+     * Falls back to the on-device engine if the device is offline, so a
+     * voiceover is always produced rather than failing outright.
+     */
     fun narrate(text: String) = viewModelScope.launch {
-        _busy.value = true; _error.value = null
-        val ok = tts.init()
-        if (!ok) { _error.value = "Text-to-speech engine unavailable"; _busy.value = false; return@launch }
+        _busy.value = true; _error.value = null; _voiceNotice.value = null
+        val result = edgeTts.synthesize(
+            context = getApplication(),
+            text = text,
+            voiceId = _voiceId.value,
+            rate = _voiceRate.value,
+            pitch = _voicePitch.value
+        )
+        result.fold(
+            onSuccess = { _voiceFile.value = it },
+            onFailure = {
+                _voiceNotice.value = "Neural voice unavailable, used the device voice instead"
+                narrateOffline(text)
+            }
+        )
+        _busy.value = false
+    }
+
+    /** Audition a voice before committing to a full render. */
+    fun previewVoice(id: String) = viewModelScope.launch {
+        _busy.value = true; _error.value = null; _voiceNotice.value = null
+        edgeTts.preview(getApplication(), id).fold(
+            onSuccess = { _voiceFile.value = it },
+            onFailure = { _error.value = it.message ?: "Could not preview this voice" }
+        )
+        _busy.value = false
+    }
+
+    private suspend fun narrateOffline(text: String) {
+        if (!tts.init()) { _error.value = "Text-to-speech engine unavailable"; return }
         val f = tts.synthesizeToFile(text.take(3800))
         if (f == null) _error.value = "Could not synthesize audio" else _voiceFile.value = f
-        _busy.value = false
     }
 
     override fun onCleared() { tts.release(); router.release(); super.onCleared() }

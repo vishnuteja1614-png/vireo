@@ -10,6 +10,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -278,6 +280,10 @@ private fun ScriptTab(vm: AiViewModel, onUseVoiceover: (java.io.File) -> Unit) {
     var tone by remember { mutableStateOf("energetic") }
     val script by vm.script.collectAsState()
     val voice by vm.voiceFile.collectAsState()
+    val voiceId by vm.voiceId.collectAsState()
+    val rate by vm.voiceRate.collectAsState()
+    val pitch by vm.voicePitch.collectAsState()
+    val notice by vm.voiceNotice.collectAsState()
     val ctx = LocalContext.current
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -297,8 +303,15 @@ private fun ScriptTab(vm: AiViewModel, onUseVoiceover: (java.io.File) -> Unit) {
             Spacer(Modifier.height(14.dp))
             ResultCard("Script", script, ctx)
             Spacer(Modifier.height(10.dp))
-            GradientButton("Generate Voiceover (offline TTS)", Modifier.fillMaxWidth(),
+            VoicePicker(vm = vm, selected = voiceId, rate = rate, pitch = pitch)
+            Spacer(Modifier.height(10.dp))
+            GradientButton("Generate Voiceover", Modifier.fillMaxWidth(),
                 icon = Icons.Filled.RecordVoiceOver) { vm.narrate(script) }
+        }
+
+        notice?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, color = Accent, fontSize = 11.sp)
         }
 
         voice?.let { f ->
@@ -316,6 +329,121 @@ private fun ScriptTab(vm: AiViewModel, onUseVoiceover: (java.io.File) -> Unit) {
             }
         }
         Spacer(Modifier.height(40.dp))
+    }
+}
+
+/**
+ * Neural voice chooser: 106 free Microsoft voices across 36 locales,
+ * including 10 Indian languages. Every voice can be auditioned before use.
+ */
+@Composable
+private fun VoicePicker(vm: AiViewModel, selected: String, rate: Int, pitch: Int) {
+    var expanded by remember { mutableStateOf(false) }
+    var language by remember { mutableStateOf(com.vireo.editor.engine.EdgeVoices.byId(selected)?.locale ?: "en-US") }
+    val current = com.vireo.editor.engine.EdgeVoices.byId(selected)
+
+    Spacer(Modifier.height(14.dp))
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.GraphicEq, null, tint = Purple, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Voice", color = TextHi, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(current?.label ?: selected, color = TextLo, fontSize = 11.sp, maxLines = 1)
+            }
+            TextButton(onClick = { expanded = !expanded }) {
+                Text(if (expanded) "Close" else "Change", color = Cyan, fontSize = 12.sp)
+            }
+        }
+
+        if (!expanded) {
+            Spacer(Modifier.height(8.dp))
+            Text("Quick picks", color = TextLo, fontSize = 10.sp)
+            Spacer(Modifier.height(6.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(vm.featuredVoices) { v ->
+                    VoiceChip(v, v.id == selected, onPick = { vm.selectVoice(v.id) },
+                        onPreview = { vm.previewVoice(v.id) })
+                }
+            }
+        } else {
+            Spacer(Modifier.height(10.dp))
+            Text("Language", color = TextLo, fontSize = 10.sp)
+            Spacer(Modifier.height(6.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(com.vireo.editor.engine.EdgeVoices.locales()) { loc ->
+                    val on = loc == language
+                    Surface(
+                        color = if (on) Purple.copy(alpha = 0.22f) else Surface2,
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.clickable { language = loc }
+                    ) {
+                        Text(
+                            com.vireo.editor.engine.EdgeVoices.LANGUAGE_NAMES[loc] ?: loc,
+                            color = if (on) Cyan else TextLo, fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            com.vireo.editor.engine.EdgeVoices.forLocale(language).forEach { v ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable { vm.selectVoice(v.id) }
+                        .padding(vertical = 7.dp)
+                ) {
+                    RadioButton(selected = v.id == selected, onClick = { vm.selectVoice(v.id) })
+                    Column(Modifier.weight(1f)) {
+                        Text(v.name, color = TextHi, fontSize = 13.sp)
+                        Text("${v.gender} · ${v.style}", color = TextLo, fontSize = 10.sp, maxLines = 1)
+                    }
+                    IconButton(onClick = { vm.previewVoice(v.id) }) {
+                        Icon(Icons.Filled.PlayArrow, "Preview", tint = Cyan, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        com.vireo.editor.ui.LabeledSlider(
+            label = "Speed", value = rate.toFloat(), range = -50f..100f,
+            valueText = if (rate == 0) "normal" else "${rate}%",
+            onChange = { vm.setVoiceRate(it.toInt()) }
+        )
+        com.vireo.editor.ui.LabeledSlider(
+            label = "Pitch", value = pitch.toFloat(), range = -50f..50f,
+            valueText = if (pitch == 0) "normal" else "${pitch}%",
+            onChange = { vm.setVoicePitch(it.toInt()) }
+        )
+    }
+}
+
+@Composable
+private fun VoiceChip(
+    v: com.vireo.editor.engine.EdgeVoice,
+    active: Boolean,
+    onPick: () -> Unit,
+    onPreview: () -> Unit
+) {
+    Surface(
+        color = if (active) Purple.copy(alpha = 0.22f) else Surface2,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.clickable(onClick = onPick)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)
+        ) {
+            Column {
+                Text(v.name, color = if (active) Cyan else TextHi, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Text(v.language, color = TextLo, fontSize = 9.sp)
+            }
+            IconButton(onClick = onPreview, modifier = Modifier.size(30.dp)) {
+                Icon(Icons.Filled.PlayArrow, "Preview", tint = Cyan, modifier = Modifier.size(16.dp))
+            }
+        }
     }
 }
 

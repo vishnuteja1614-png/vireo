@@ -63,4 +63,10 @@ class AiConfig(context: Context) {
             "meta-llama/llama-3.1-8b-instruct:free" to "Llama 3.1 8B · FREE"
         )
     }
+
+    /** Last neural voice the creator picked. */
+    var voiceId: String
+        get() = prefs.getString("voice_id", com.vireo.editor.engine.EdgeVoices.DEFAULT)
+            ?: com.vireo.editor.engine.EdgeVoices.DEFAULT
+        set(v) = prefs.edit { putString("voice_id", v) }
 }
