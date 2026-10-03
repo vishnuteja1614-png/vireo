@@ -38,6 +38,7 @@ import androidx.media3.transformer.Transformer
 import androidx.media3.transformer.VideoEncoderSettings
 import com.google.common.collect.ImmutableList
 import com.vireo.editor.data.*
+import com.vireo.editor.data.CaptionStyles
 import com.vireo.editor.data.TextOverlay as VTextOverlay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -218,11 +219,17 @@ class VideoExporter(private val context: Context) {
             outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
         )
 
-        // ---- burn in text overlays that fall inside this clip's window ----
+        // ---- transition in-animation for this clip ----
+        // Runs after Presentation so the geometry is expressed in output space.
+        videoEffects += TransitionEffects.effectsFor(clip.transitionId, clip.transitionMs)
+
+        // ---- burn in captions / text that fall inside this clip's window ----
         val clipEndMs = timelineStartMs + clip.outputDurationMs
+        // byId() always resolves, falling back to the first preset.
+        val style = CaptionStyles.byId(project.captionStyleId)
         val overlays: List<TextureOverlay> = project.texts
             .filter { it.startMs < clipEndMs && it.endMs > timelineStartMs }
-            .map { textOverlay(it, outH, timelineStartMs) }
+            .map { cue -> CaptionOverlay(cue, style, outW, outH, timelineStartMs) }
         if (overlays.isNotEmpty()) {
             videoEffects += OverlayEffect(ImmutableList.copyOf(overlays))
         }
@@ -257,6 +264,8 @@ class VideoExporter(private val context: Context) {
     }
 
     /** Media3 text overlay positioned from the project's fractional coordinates. */
+    /** Plain fallback overlay, kept for styles that need no decoration. */
+    @Suppress("unused")
     private fun textOverlay(t: VTextOverlay, outH: Int, clipStartMs: Long): TextureOverlay {
         val pxSize = (t.sizeSp * outH / 720f).toInt().coerceAtLeast(12)
         val span = SpannableString(t.text).apply {
