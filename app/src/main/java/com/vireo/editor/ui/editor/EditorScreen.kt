@@ -28,7 +28,7 @@ import androidx.media3.ui.PlayerView
 import com.vireo.editor.data.*
 import com.vireo.editor.ui.theme.*
 
-enum class EditorTool { NONE, SPLIT, SPEED, FILTER, TEXT, AUDIO, TRANSITION, VOLUME }
+enum class EditorTool { NONE, SPLIT, SPEED, FILTER, TEXT, AUDIO, TRANSITION, VOLUME, MOTION, COLOR, CHROMA }
 
 @UnstableApi
 @Composable
@@ -179,7 +179,13 @@ fun EditorScreen(
             RailItem(Icons.Filled.ContentCut, "Split") { vm.splitAtPlayhead() }
             RailItem(Icons.Filled.Speed, "Speed", tool == EditorTool.SPEED) { tool = toggle(tool, EditorTool.SPEED) }
             RailItem(Icons.Filled.FilterVintage, "Filter", tool == EditorTool.FILTER) { tool = toggle(tool, EditorTool.FILTER) }
-            RailItem(Icons.Filled.TextFields, "Text") { vm.addText(); tool = EditorTool.NONE }
+            RailItem(Icons.Filled.TextFields, "Text", tool == EditorTool.TEXT) {
+                if (vm.project.value.texts.isEmpty()) vm.addText()
+                tool = toggle(tool, EditorTool.TEXT)
+            }
+            RailItem(Icons.Filled.Crop, "Crop", tool == EditorTool.MOTION) { tool = toggle(tool, EditorTool.MOTION) }
+            RailItem(Icons.Filled.Palette, "Colour", tool == EditorTool.COLOR) { tool = toggle(tool, EditorTool.COLOR) }
+            RailItem(Icons.Filled.Contrast, "Green Screen", tool == EditorTool.CHROMA) { tool = toggle(tool, EditorTool.CHROMA) }
             RailItem(Icons.Filled.VolumeUp, "Volume", tool == EditorTool.VOLUME) { tool = toggle(tool, EditorTool.VOLUME) }
             RailItem(Icons.Filled.Transform, "Transition") { onOpenTransitions() }
             RailItem(Icons.Filled.ClosedCaption, "Captions") { onOpenCaptions() }

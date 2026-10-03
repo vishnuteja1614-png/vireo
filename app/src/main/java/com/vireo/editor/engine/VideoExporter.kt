@@ -208,8 +208,14 @@ class VideoExporter(private val context: Context) {
         }
         val source = builder.build()
 
+        // One clock per clip: Media3 timestamps are cumulative across a
+        // sequence, so every time-based effect needs a shared origin.
+        val clock = ClipClock()
+
         // ---- video effects ----
         val videoEffects = mutableListOf<Effect>()
+        // Crop and LUT run before the colour grade; pan/zoom and chroma key after.
+        videoEffects += MotionEffects.effectsFor(clip, clock)
         videoEffects += FilterFactory.effectsFor(clip)
         if (clip.rotationDeg != 0f) {
             videoEffects += ScaleAndRotateTransformation.Builder()
@@ -218,10 +224,6 @@ class VideoExporter(private val context: Context) {
         videoEffects += Presentation.createForWidthAndHeight(
             outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
         )
-
-        // One clock per clip: Media3 timestamps are cumulative across a
-        // sequence, so transitions and captions both need a shared origin.
-        val clock = ClipClock()
 
         // ---- transition in-animation for this clip ----
         // Runs after Presentation so the geometry is expressed in output space.

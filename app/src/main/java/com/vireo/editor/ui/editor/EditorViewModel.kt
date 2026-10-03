@@ -178,6 +178,43 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSpeed(id: String, speed: Float) = updateClip(id) { it.copy(speed = speed.coerceIn(0.25f, 4f)) }
     fun setFilter(id: String, f: FilterPreset) = updateClip(id) { it.copy(filter = f) }
+
+    // ---- framing, colour and keying ----
+    fun setPanZoom(id: String, p: PanZoom) = updateClip(id) { it.copy(panZoom = p) }
+
+    fun setLut(id: String, lutId: String) = updateClip(id) { it.copy(lutId = lutId) }
+
+    fun setCrop(id: String, l: Float, t: Float, r: Float, b: Float) = updateClip(id) {
+        it.copy(
+            cropLeft = l.coerceIn(0f, 0.9f), cropTop = t.coerceIn(0f, 0.9f),
+            cropRight = r.coerceIn(0.1f, 1f), cropBottom = b.coerceIn(0.1f, 1f)
+        )
+    }
+
+    fun setChromaEnabled(id: String, on: Boolean) = updateClip(id) { it.copy(chromaKey = on) }
+
+    fun setChromaColor(id: String, rgb: Int) = updateClip(id) { it.copy(chromaColorRgb = rgb) }
+
+    fun setChromaBack(id: String, rgb: Int) = updateClip(id) { it.copy(chromaBackRgb = rgb) }
+
+    fun setChromaTuning(id: String, similarity: Float, smoothness: Float, spill: Float) =
+        updateClip(id) {
+            it.copy(
+                chromaSimilarity = similarity.coerceIn(0f, 1f),
+                chromaSmoothness = smoothness.coerceIn(0.001f, 1f),
+                chromaSpill = spill.coerceIn(0.001f, 1f)
+            )
+        }
+
+    /** Manual colour grade, the controls a desktop editor exposes. */
+    fun setGrade(id: String, brightness: Float, contrast: Float, saturation: Float) =
+        updateClip(id) {
+            it.copy(
+                brightness = brightness.coerceIn(-1f, 1f),
+                contrast = contrast.coerceIn(-1f, 1f),
+                saturation = saturation.coerceIn(0f, 2f)
+            )
+        }
     fun setTransition(id: String, t: TransitionType, ms: Long) = updateClip(id) { it.copy(transitionIn = t, transitionMs = ms) }
     fun setTransitionPreset(id: String, def: TransitionDef) =
         updateClip(id) { it.copy(transitionId = def.id, transitionMs = def.defaultMs) }

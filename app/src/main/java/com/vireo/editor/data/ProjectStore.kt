@@ -97,6 +97,18 @@ class ProjectStore(context: Context) {
         put("brightness", brightness)
         put("contrast", contrast)
         put("saturation", saturation)
+        put("cropLeft", cropLeft)
+        put("cropTop", cropTop)
+        put("cropRight", cropRight)
+        put("cropBottom", cropBottom)
+        put("panZoom", panZoom.name)
+        put("lutId", lutId)
+        put("chromaKey", chromaKey)
+        put("chromaColorRgb", chromaColorRgb)
+        put("chromaBackRgb", chromaBackRgb)
+        put("chromaSimilarity", chromaSimilarity)
+        put("chromaSmoothness", chromaSmoothness)
+        put("chromaSpill", chromaSpill)
         put("transitionIn", transitionIn.name)
         put("transitionId", transitionId)
         put("transitionMs", transitionMs)
@@ -122,6 +134,19 @@ class ProjectStore(context: Context) {
         brightness = optDouble("brightness", 0.0).toFloat(),
         contrast = optDouble("contrast", 0.0).toFloat(),
         saturation = optDouble("saturation", 1.0).toFloat(),
+        cropLeft = optDouble("cropLeft", 0.0).toFloat(),
+        cropTop = optDouble("cropTop", 0.0).toFloat(),
+        cropRight = optDouble("cropRight", 1.0).toFloat(),
+        cropBottom = optDouble("cropBottom", 1.0).toFloat(),
+        panZoom = runCatching { PanZoom.valueOf(optString("panZoom")) }
+            .getOrDefault(PanZoom.NONE),
+        lutId = optString("lutId", "NONE"),
+        chromaKey = optBoolean("chromaKey"),
+        chromaColorRgb = optInt("chromaColorRgb", 0x00FF00),
+        chromaBackRgb = optInt("chromaBackRgb", 0x000000),
+        chromaSimilarity = optDouble("chromaSimilarity", 0.40).toFloat(),
+        chromaSmoothness = optDouble("chromaSmoothness", 0.08).toFloat(),
+        chromaSpill = optDouble("chromaSpill", 0.15).toFloat(),
         transitionIn = runCatching { TransitionType.valueOf(optString("transitionIn")) }
             .getOrDefault(TransitionType.NONE),
         transitionId = optString("transitionId", "none"),

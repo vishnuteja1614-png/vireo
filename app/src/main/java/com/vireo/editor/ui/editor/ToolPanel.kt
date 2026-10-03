@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.common.util.UnstableApi
 import com.vireo.editor.data.Clip
 import com.vireo.editor.data.FilterPreset
+import com.vireo.editor.data.PanZoom
 import com.vireo.editor.data.TransitionType
 import com.vireo.editor.ui.LabeledSlider
 import com.vireo.editor.ui.theme.*
@@ -40,6 +41,9 @@ fun ToolPanel(clip: Clip, tool: EditorTool, vm: EditorViewModel, onClose: () -> 
                         EditorTool.VOLUME -> "Volume"
                         EditorTool.TRANSITION -> "Transition"
                         EditorTool.TEXT -> "Text"
+                        EditorTool.MOTION -> "Crop & Motion"
+                        EditorTool.COLOR -> "Colour Grade"
+                        EditorTool.CHROMA -> "Green Screen"
                         else -> ""
                     },
                     color = TextHi, fontSize = 15.sp, fontWeight = FontWeight.SemiBold
@@ -108,6 +112,9 @@ fun ToolPanel(clip: Clip, tool: EditorTool, vm: EditorViewModel, onClose: () -> 
                 }
 
                 EditorTool.TEXT -> TextPanel(vm)
+                EditorTool.MOTION -> MotionPanel(clip, vm)
+                EditorTool.COLOR -> ColorPanel(clip, vm)
+                EditorTool.CHROMA -> ChromaPanel(clip, vm)
 
                 else -> Unit
             }
@@ -232,6 +239,166 @@ private fun TextPanel(vm: EditorViewModel) {
         }
     }
 }
+
+
+/** Ken Burns motion plus a simple edge crop. */
+@UnstableApi
+@Composable
+private fun MotionPanel(clip: Clip, vm: EditorViewModel) {
+    Text("Motion (Ken Burns)", color = TextLo, fontSize = 11.sp)
+    Spacer(Modifier.height(6.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        PanZoom.entries.forEach { p ->
+            PresetChip(p.label, clip.panZoom == p) { vm.setPanZoom(clip.id, p) }
+        }
+    }
+
+    Spacer(Modifier.height(14.dp))
+    Text("Crop", color = TextLo, fontSize = 11.sp)
+    LabeledSlider("Left", clip.cropLeft, 0f..0.45f, "${(clip.cropLeft * 100).toInt()}%") {
+        vm.setCrop(clip.id, it, clip.cropTop, clip.cropRight, clip.cropBottom)
+    }
+    LabeledSlider("Right", clip.cropRight, 0.55f..1f, "${(clip.cropRight * 100).toInt()}%") {
+        vm.setCrop(clip.id, clip.cropLeft, clip.cropTop, it, clip.cropBottom)
+    }
+    LabeledSlider("Top", clip.cropTop, 0f..0.45f, "${(clip.cropTop * 100).toInt()}%") {
+        vm.setCrop(clip.id, clip.cropLeft, it, clip.cropRight, clip.cropBottom)
+    }
+    LabeledSlider("Bottom", clip.cropBottom, 0.55f..1f, "${(clip.cropBottom * 100).toInt()}%") {
+        vm.setCrop(clip.id, clip.cropLeft, clip.cropTop, clip.cropRight, it)
+    }
+    TextButton(onClick = { vm.setCrop(clip.id, 0f, 0f, 1f, 1f) }) {
+        Text("Reset crop", color = Cyan, fontSize = 12.sp)
+    }
+}
+
+/** Film LUTs plus the manual grade that previously had no UI at all. */
+@UnstableApi
+@Composable
+private fun ColorPanel(clip: Clip, vm: EditorViewModel) {
+    Text("Film look (LUT)", color = TextLo, fontSize = 11.sp)
+    Spacer(Modifier.height(6.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        com.vireo.editor.engine.LutPreset.entries.forEach { l ->
+            PresetChip(l.label, clip.lutId == l.name) { vm.setLut(clip.id, l.name) }
+        }
+    }
+
+    Spacer(Modifier.height(14.dp))
+    Text("Manual grade", color = TextLo, fontSize = 11.sp)
+    LabeledSlider("Brightness", clip.brightness, -1f..1f,
+        "${(clip.brightness * 100).toInt()}") {
+        vm.setGrade(clip.id, it, clip.contrast, clip.saturation)
+    }
+    LabeledSlider("Contrast", clip.contrast, -1f..1f,
+        "${(clip.contrast * 100).toInt()}") {
+        vm.setGrade(clip.id, clip.brightness, it, clip.saturation)
+    }
+    LabeledSlider("Saturation", clip.saturation, 0f..2f,
+        "${(clip.saturation * 100).toInt()}%") {
+        vm.setGrade(clip.id, clip.brightness, clip.contrast, it)
+    }
+    TextButton(onClick = { vm.setGrade(clip.id, 0f, 0f, 1f) }) {
+        Text("Reset grade", color = Cyan, fontSize = 12.sp)
+    }
+}
+
+/** Green-screen keying, tuned on the GPU. */
+@UnstableApi
+@Composable
+private fun ChromaPanel(clip: Clip, vm: EditorViewModel) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Remove background", color = TextHi, fontSize = 14.sp)
+        Spacer(Modifier.weight(1f))
+        Switch(
+            checked = clip.chromaKey,
+            onCheckedChange = { vm.setChromaEnabled(clip.id, it) },
+            colors = SwitchDefaults.colors(checkedTrackColor = Purple)
+        )
+    }
+
+    if (!clip.chromaKey) {
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Shoot against an evenly lit green or blue sheet for the cleanest cut-out.",
+            color = TextLo, fontSize = 11.sp
+        )
+        return
+    }
+
+    Spacer(Modifier.height(12.dp))
+    Text("Colour to remove", color = TextLo, fontSize = 11.sp)
+    Spacer(Modifier.height(6.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        KEY_COLOURS.forEach { (label, rgb) ->
+            val on = clip.chromaColorRgb == rgb
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    Modifier
+                        .size(if (on) 32.dp else 26.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color(0xFF000000.toInt() or rgb))
+                        .border(
+                            if (on) 2.dp else 1.dp,
+                            if (on) Cyan else Stroke,
+                            RoundedCornerShape(50)
+                        )
+                        .clickable { vm.setChromaColor(clip.id, rgb) }
+                )
+                Text(label, color = TextLo, fontSize = 9.sp)
+            }
+        }
+    }
+
+    Spacer(Modifier.height(12.dp))
+    Text("Replace with", color = TextLo, fontSize = 11.sp)
+    Spacer(Modifier.height(6.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        BACK_COLOURS.forEach { rgb ->
+            val on = clip.chromaBackRgb == rgb
+            Box(
+                Modifier
+                    .size(if (on) 30.dp else 24.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFF000000.toInt() or rgb))
+                    .border(if (on) 2.dp else 1.dp, if (on) Cyan else Stroke, RoundedCornerShape(50))
+                    .clickable { vm.setChromaBack(clip.id, rgb) }
+            )
+        }
+    }
+
+    Spacer(Modifier.height(10.dp))
+    LabeledSlider("Strength", clip.chromaSimilarity, 0.05f..0.9f,
+        "${(clip.chromaSimilarity * 100).toInt()}%") {
+        vm.setChromaTuning(clip.id, it, clip.chromaSmoothness, clip.chromaSpill)
+    }
+    LabeledSlider("Edge softness", clip.chromaSmoothness, 0.01f..0.4f,
+        "${(clip.chromaSmoothness * 100).toInt()}%") {
+        vm.setChromaTuning(clip.id, clip.chromaSimilarity, it, clip.chromaSpill)
+    }
+    LabeledSlider("Spill removal", clip.chromaSpill, 0.01f..0.6f,
+        "${(clip.chromaSpill * 100).toInt()}%") {
+        vm.setChromaTuning(clip.id, clip.chromaSimilarity, clip.chromaSmoothness, it)
+    }
+
+    Spacer(Modifier.height(6.dp))
+    Text(
+        "Video encoders cannot store transparency, so the keyed area is filled " +
+            "with the colour you picked above.",
+        color = TextLo, fontSize = 10.sp
+    )
+}
+
+private val KEY_COLOURS = listOf(
+    "Green" to 0x00FF00, "Blue" to 0x0047FF, "Cyan" to 0x00FFD1,
+    "Magenta" to 0xFF00E5, "White" to 0xFFFFFF, "Black" to 0x000000
+)
+
+private val BACK_COLOURS = listOf(
+    0x000000, 0xFFFFFF, 0x0A0A0C, 0x8B5CF6, 0x22D3EE, 0xEF4444, 0x34D399
+)
 
 /** Swatches that read well burned over video. */
 private val TEXT_COLOURS = listOf(

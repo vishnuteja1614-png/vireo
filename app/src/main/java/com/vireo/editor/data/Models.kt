@@ -31,7 +31,30 @@ data class Clip(
     val rotationDeg: Float = 0f,
     val transitionIn: TransitionType = TransitionType.NONE,
     val transitionId: String = "none",
-    val transitionMs: Long = 600L
+    val transitionMs: Long = 600L,
+
+    // ---- framing ----
+    /** Crop rectangle as 0..1 fractions of the source frame. */
+    val cropLeft: Float = 0f,
+    val cropTop: Float = 0f,
+    val cropRight: Float = 1f,
+    val cropBottom: Float = 1f,
+    /** Ken Burns move applied across the clip. */
+    val panZoom: PanZoom = PanZoom.NONE,
+
+    // ---- colour ----
+    /** Name of a [com.vireo.editor.engine.LutPreset]. */
+    val lutId: String = "NONE",
+
+    // ---- chroma key ----
+    val chromaKey: Boolean = false,
+    /** Colour to remove, 0xRRGGBB. Default pure green. */
+    val chromaColorRgb: Int = 0x00FF00,
+    /** Colour painted behind the subject (alpha cannot survive encoding). */
+    val chromaBackRgb: Int = 0x000000,
+    val chromaSimilarity: Float = 0.40f,
+    val chromaSmoothness: Float = 0.08f,
+    val chromaSpill: Float = 0.15f
 ) {
     val sourceDurationMs: Long get() = (trimEndMs - trimStartMs).coerceAtLeast(0L)
     val outputDurationMs: Long get() = (sourceDurationMs / speed).toLong()
@@ -46,6 +69,14 @@ enum class TransitionType(val label: String) {
     NONE("None"), FADE("Fade"), DISSOLVE("Dissolve"), SLIDE("Slide"),
     WIPE("Wipe"), ZOOM("Zoom"), SPIN("Spin"), GLITCH("Glitch"),
     BLUR("Blur"), WHIP("Whip Pan"), FLASH("Flash"), PIXELATE("Pixelate")
+}
+
+/** Ken Burns style motion applied across a clip. */
+enum class PanZoom(val label: String) {
+    NONE("None"), ZOOM_IN("Zoom In"), ZOOM_OUT("Zoom Out"),
+    PAN_LEFT("Pan Left"), PAN_RIGHT("Pan Right"),
+    PAN_UP("Pan Up"), PAN_DOWN("Pan Down"),
+    ZOOM_IN_LEFT("Zoom + Left"), ZOOM_OUT_RIGHT("Zoom Out + Right")
 }
 
 enum class TextAnim(val label: String) {
