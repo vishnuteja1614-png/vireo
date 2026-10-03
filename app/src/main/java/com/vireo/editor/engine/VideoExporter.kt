@@ -219,9 +219,13 @@ class VideoExporter(private val context: Context) {
             outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
         )
 
+        // One clock per clip: Media3 timestamps are cumulative across a
+        // sequence, so transitions and captions both need a shared origin.
+        val clock = ClipClock()
+
         // ---- transition in-animation for this clip ----
         // Runs after Presentation so the geometry is expressed in output space.
-        videoEffects += TransitionEffects.effectsFor(clip.transitionId, clip.transitionMs)
+        videoEffects += TransitionEffects.effectsFor(clip.transitionId, clip.transitionMs, clock)
 
         // ---- burn in captions / text that fall inside this clip's window ----
         val clipEndMs = timelineStartMs + clip.outputDurationMs
@@ -229,7 +233,7 @@ class VideoExporter(private val context: Context) {
         val style = CaptionStyles.byId(project.captionStyleId)
         val overlays: List<TextureOverlay> = project.texts
             .filter { it.startMs < clipEndMs && it.endMs > timelineStartMs }
-            .map { cue -> CaptionOverlay(cue, style, outW, outH, timelineStartMs) }
+            .map { cue -> CaptionOverlay(cue, style, outW, outH, timelineStartMs, clock) }
         if (overlays.isNotEmpty()) {
             videoEffects += OverlayEffect(ImmutableList.copyOf(overlays))
         }

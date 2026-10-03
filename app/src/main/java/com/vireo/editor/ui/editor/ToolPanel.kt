@@ -9,8 +9,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +39,7 @@ fun ToolPanel(clip: Clip, tool: EditorTool, vm: EditorViewModel, onClose: () -> 
                         EditorTool.FILTER -> "Filters"
                         EditorTool.VOLUME -> "Volume"
                         EditorTool.TRANSITION -> "Transition"
+                        EditorTool.TEXT -> "Text"
                         else -> ""
                     },
                     color = TextHi, fontSize = 15.sp, fontWeight = FontWeight.SemiBold
@@ -104,11 +107,137 @@ fun ToolPanel(clip: Clip, tool: EditorTool, vm: EditorViewModel, onClose: () -> 
                     }
                 }
 
+                EditorTool.TEXT -> TextPanel(vm)
+
                 else -> Unit
             }
         }
     }
 }
+
+/**
+ * Edit the selected text overlay.
+ *
+ * Previously `EditorTool.TEXT` existed in the enum but had no branch here, so
+ * tapping "Text" inserted a hardcoded "Your title" overlay that could never be
+ * changed - `updateText` was never called from anywhere in the UI. This is that
+ * missing editor: content, size, colour, placement, timing and delete.
+ */
+@UnstableApi
+@Composable
+private fun TextPanel(vm: EditorViewModel) {
+    val project by vm.project.collectAsState()
+    val overlays = project.texts
+    var editingId by remember(overlays.size) { mutableStateOf(overlays.lastOrNull()?.id) }
+    val overlay = overlays.firstOrNull { it.id == editingId }
+
+    if (overlay == null) {
+        Text("Tap Text on the toolbar to add a caption.", color = TextLo, fontSize = 13.sp)
+        return
+    }
+
+    // Pick between multiple overlays when there is more than one.
+    if (overlays.size > 1) {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            overlays.forEachIndexed { index, t ->
+                PresetChip(
+                    label = t.text.take(10).ifBlank { "Text ${index + 1}" },
+                    selected = t.id == editingId
+                ) { editingId = t.id }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+    }
+
+    OutlinedTextField(
+        value = overlay.text,
+        onValueChange = { v -> vm.updateText(overlay.id) { it.copy(text = v) } },
+        label = { Text("Text", color = TextLo, fontSize = 12.sp) },
+        textStyle = LocalTextStyle.current.copy(color = TextHi, fontSize = 15.sp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Purple,
+            unfocusedBorderColor = Stroke,
+            cursorColor = Cyan
+        ),
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 3
+    )
+
+    Spacer(Modifier.height(12.dp))
+    Text("Colour", color = TextLo, fontSize = 11.sp)
+    Spacer(Modifier.height(6.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        TEXT_COLOURS.forEach { argb ->
+            val on = overlay.colorArgb == argb
+            Box(
+                Modifier
+                    .size(if (on) 32.dp else 26.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(argb))
+                    .border(
+                        width = if (on) 2.dp else 1.dp,
+                        color = if (on) Cyan else Stroke,
+                        shape = RoundedCornerShape(50)
+                    )
+                    .clickable { vm.updateText(overlay.id) { it.copy(colorArgb = argb) } }
+            )
+        }
+    }
+
+    Spacer(Modifier.height(10.dp))
+    LabeledSlider("Size", overlay.sizeSp, 12f..96f, "${overlay.sizeSp.toInt()}sp") { v ->
+        vm.updateText(overlay.id) { it.copy(sizeSp = v) }
+    }
+    LabeledSlider("Horizontal", overlay.xFraction, 0f..1f,
+        "${(overlay.xFraction * 100).toInt()}%") { v ->
+        vm.updateText(overlay.id) { it.copy(xFraction = v) }
+    }
+    LabeledSlider("Vertical", overlay.yFraction, 0f..1f,
+        "${(overlay.yFraction * 100).toInt()}%") { v ->
+        vm.updateText(overlay.id) { it.copy(yFraction = v) }
+    }
+    LabeledSlider("Opacity", overlay.opacity, 0.1f..1f,
+        "${(overlay.opacity * 100).toInt()}%") { v ->
+        vm.updateText(overlay.id) { it.copy(opacity = v) }
+    }
+
+    Spacer(Modifier.height(4.dp))
+    Text("Timing", color = TextLo, fontSize = 11.sp)
+    LabeledSlider("Start", overlay.startMs / 1000f, 0f..60f,
+        "${"%.1f".format(overlay.startMs / 1000f)}s") { v ->
+        val start = (v * 1000).toLong()
+        vm.updateText(overlay.id) {
+            it.copy(startMs = start, endMs = maxOf(it.endMs, start + 500L))
+        }
+    }
+    LabeledSlider("Duration", (overlay.endMs - overlay.startMs) / 1000f, 0.5f..30f,
+        "${"%.1f".format((overlay.endMs - overlay.startMs) / 1000f)}s") { v ->
+        vm.updateText(overlay.id) { it.copy(endMs = it.startMs + (v * 1000).toLong()) }
+    }
+
+    Spacer(Modifier.height(10.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        TextButton(onClick = { vm.addText() }) {
+            Text("+ Add another", color = Cyan, fontSize = 13.sp)
+        }
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = {
+            vm.removeText(overlay.id)
+            editingId = vm.project.value.texts.lastOrNull()?.id
+        }) {
+            Text("Delete", color = Danger, fontSize = 13.sp)
+        }
+    }
+}
+
+/** Swatches that read well burned over video. */
+private val TEXT_COLOURS = listOf(
+    0xFFFFFFFF.toInt(), 0xFF000000.toInt(), 0xFFFFD60A.toInt(), 0xFF8B5CF6.toInt(),
+    0xFF22D3EE.toInt(), 0xFFEF4444.toInt(), 0xFF34D399.toInt(), 0xFFF472B6.toInt()
+)
 
 @Composable
 private fun PresetChip(label: String, selected: Boolean, onClick: () -> Unit) {

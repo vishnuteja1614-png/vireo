@@ -74,20 +74,51 @@ fun VireoApp() {
     val gallery by vm.gallery.collectAsState()
     val picked by vm.picked.collectAsState()
     val project by vm.project.collectAsState()
-    var recent by remember { mutableStateOf<List<Project>>(emptyList()) }
+    // Projects are persisted to disk, so "Recent" survives the app closing.
+    val store = remember { com.vireo.editor.data.ProjectStore(context) }
+    var recent by remember { mutableStateOf(store.load()) }
+
+    fun rememberProject(p: Project) {
+        if (p.clips.isEmpty()) return
+        store.save(p)
+        recent = store.load()
+    }
 
     NavHost(nav, startDestination = "home") {
         composable("home") {
             HomeScreen(
                 recent = recent,
-                onNewProject = { vm.loadGallery(MediaKind.VIDEO); nav.navigate("picker") },
-                onOpenProject = { nav.navigate("editor") },
+                onNewProject = {
+                    vm.newProject()
+                    vm.loadGallery(MediaKind.VIDEO)
+                    nav.navigate("picker")
+                },
+                onOpenProject = { p -> vm.openProject(p); nav.navigate("editor") },
                 onQuickTool = { tool ->
+                    // Each quick tool now has real behaviour; previously trim,
+                    // merge and compress all fell through to the same branch.
                     when (tool) {
                         "ai" -> nav.navigate("ai")
                         "settings" -> nav.navigate("settings")
                         "captions" -> nav.navigate("captions")
-                        else -> { vm.loadGallery(MediaKind.VIDEO); nav.navigate("picker") }
+                        "compress" -> {
+                            if (project.clips.isEmpty()) {
+                                vm.newProject(); vm.loadGallery(MediaKind.VIDEO); nav.navigate("picker")
+                            } else {
+                                vm.applyCompressPreset()
+                                nav.navigate("export")
+                            }
+                        }
+                        "merge" -> {
+                            vm.newProject()
+                            vm.loadGallery(MediaKind.VIDEO)
+                            nav.navigate("picker")
+                        }
+                        else -> { // trim
+                            vm.newProject()
+                            vm.loadGallery(MediaKind.VIDEO)
+                            nav.navigate("picker")
+                        }
                     }
                 }
             )
@@ -109,7 +140,7 @@ fun VireoApp() {
             EditorScreen(
                 vm = vm,
                 onBack = {
-                    recent = (listOf(project) + recent).distinctBy { it.id }.take(8)
+                    rememberProject(project)
                     nav.popBackStack("home", inclusive = false)
                 },
                 onExport = { nav.navigate("export") },
@@ -154,7 +185,7 @@ fun VireoApp() {
         composable("export") {
             ExportScreen(
                 vm = vm,
-                onClose = { vm.resetExport(); nav.popBackStack() },
+                onClose = { rememberProject(project); vm.resetExport(); nav.popBackStack() },
                 onShare = { uri -> shareVideo(context, uri) }
             )
         }

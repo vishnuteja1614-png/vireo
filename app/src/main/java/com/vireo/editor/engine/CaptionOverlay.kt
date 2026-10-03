@@ -31,12 +31,21 @@ class CaptionOverlay(
     private val frameWidth: Int,
     private val frameHeight: Int,
     /** Timeline offset of the clip this overlay is attached to. */
-    private val clipStartMs: Long
+    private val clipStartMs: Long,
+    /** Shared with this clip's transition so both agree on where the clip starts. */
+    private val clock: ClipClock
 ) : BitmapOverlay() {
 
-    private val startUs = (cue.startMs - clipStartMs).coerceAtLeast(0L) * 1_000L
-    private val endUs = (cue.endMs - clipStartMs).coerceAtLeast(0L) * 1_000L
+    // Cue windows are absolute timeline positions; frame timestamps are
+    // converted to the same space via the clock before comparison.
+    private val startUs = cue.startMs * 1_000L
+    private val endUs = cue.endMs * 1_000L
     private val durationUs = (endUs - startUs).coerceAtLeast(1L)
+    private val clipStartUs = clipStartMs * 1_000L
+
+    /** Frame timestamp -> absolute position on the project timeline. */
+    private fun timelineUs(presentationTimeUs: Long): Long =
+        clipStartUs + clock.localUs(presentationTimeUs)
 
     private val words: List<String> = cue.text.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
 
@@ -49,16 +58,18 @@ class CaptionOverlay(
     // --------------------------------------------------------------- overlay
 
     override fun getBitmap(presentationTimeUs: Long): Bitmap {
-        if (presentationTimeUs < startUs || presentationTimeUs > endUs) return blankBitmap()
-        val t = ((presentationTimeUs - startUs).toFloat() / durationUs).coerceIn(0f, 1f)
+        val now = timelineUs(presentationTimeUs)
+        if (now < startUs || now > endUs) return blankBitmap()
+        val t = ((now - startUs).toFloat() / durationUs).coerceIn(0f, 1f)
         // 60 animation steps is smoother than the eye resolves, and caps memory.
         val step = (t * 60f).toInt().coerceIn(0, 60)
         return cache.getOrPut(step) { render(step / 60f) }
     }
 
     override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
-        val visible = presentationTimeUs in startUs..endUs
-        val t = if (visible) ((presentationTimeUs - startUs).toFloat() / durationUs).coerceIn(0f, 1f) else 0f
+        val now = timelineUs(presentationTimeUs)
+        val visible = now in startUs..endUs
+        val t = if (visible) ((now - startUs).toFloat() / durationUs).coerceIn(0f, 1f) else 0f
 
         var alpha = if (visible) cue.opacity.coerceIn(0f, 1f) else 0f
         var scaleX = 1f
@@ -67,8 +78,8 @@ class CaptionOverlay(
 
         if (visible) {
             // Entry occupies the first 300 ms, exit the last 200 ms.
-            val inT = ((presentationTimeUs - startUs) / 300_000f).coerceIn(0f, 1f)
-            val outT = ((endUs - presentationTimeUs) / 200_000f).coerceIn(0f, 1f)
+            val inT = ((now - startUs) / 300_000f).coerceIn(0f, 1f)
+            val outT = ((endUs - now) / 200_000f).coerceIn(0f, 1f)
 
             when (capStyle.anim) {
                 CaptionAnim.FADE -> alpha *= inT * outT
@@ -108,7 +119,7 @@ class CaptionOverlay(
         val y = 1f - (cue.yFraction * 2f) + dy
 
         val shakeX = if (visible && capStyle.anim == CaptionAnim.SHAKE)
-            sin(presentationTimeUs * 0.00045).toFloat() * 0.012f else 0f
+            sin(clock.localUs(presentationTimeUs) * 0.00045).toFloat() * 0.012f else 0f
 
         return OverlaySettings.Builder()
             .setOverlayFrameAnchor(0f, 0f)

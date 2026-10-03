@@ -100,6 +100,29 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     // ---- timeline ops ----
     fun selectClip(id: String?) { _selectedClipId.value = id }
 
+    /** Start a clean timeline. Without this, every "new project" reused the old one. */
+    fun newProject() {
+        _project.value = Project()
+        _selectedClipId.value = null
+        _playheadMs.value = 0L
+        _picked.value = emptyList()
+    }
+
+    /** Reopen a saved project from the Recent list. */
+    fun openProject(p: Project) {
+        _project.value = p
+        _selectedClipId.value = p.clips.firstOrNull()?.id
+        _playheadMs.value = 0L
+    }
+
+    /**
+     * Quick "Compress" preset: drop to 720p and a low bitrate, which is what
+     * people actually want when they tap Compress (smaller file, same length).
+     */
+    fun applyCompressPreset() {
+        _settings.update { it.copy(resolution = Resolution.P720, bitrateMbps = 3) }
+    }
+
     fun updateClip(id: String, block: (Clip) -> Clip) =
         mutate { p -> p.copy(clips = p.clips.map { if (it.id == id) block(it) else it }) }
 
