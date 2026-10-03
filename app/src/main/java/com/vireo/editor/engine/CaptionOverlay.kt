@@ -27,7 +27,7 @@ import kotlin.math.sin
  */
 class CaptionOverlay(
     private val cue: VTextOverlay,
-    private val style: CaptionStyle,
+    private val capStyle: CaptionStyle,
     private val frameWidth: Int,
     private val frameHeight: Int,
     /** Timeline offset of the clip this overlay is attached to. */
@@ -70,7 +70,7 @@ class CaptionOverlay(
             val inT = ((presentationTimeUs - startUs) / 300_000f).coerceIn(0f, 1f)
             val outT = ((endUs - presentationTimeUs) / 200_000f).coerceIn(0f, 1f)
 
-            when (style.anim) {
+            when (capStyle.anim) {
                 CaptionAnim.FADE -> alpha *= inT * outT
                 CaptionAnim.POP -> {
                     val s = overshoot(inT)
@@ -107,7 +107,7 @@ class CaptionOverlay(
         val x = (cue.xFraction * 2f) - 1f
         val y = 1f - (cue.yFraction * 2f) + dy
 
-        val shakeX = if (visible && style.anim == CaptionAnim.SHAKE)
+        val shakeX = if (visible && capStyle.anim == CaptionAnim.SHAKE)
             sin(presentationTimeUs * 0.00045).toFloat() * 0.012f else 0f
 
         return OverlaySettings.Builder()
@@ -122,18 +122,18 @@ class CaptionOverlay(
 
     private fun render(t: Float): Bitmap {
         val textPaint = buildPaint(fill = true)
-        val strokePaint = if (style.strokeWidth > 0f) buildPaint(fill = false) else null
+        val strokePaint = if (capStyle.strokeWidth > 0f) buildPaint(fill = false) else null
 
-        val visibleWords = when (style.anim) {
+        val visibleWords = when (capStyle.anim) {
             CaptionAnim.WORD_BY_WORD -> words.take((t * words.size).toInt().coerceAtLeast(1))
             else -> words
         }
-        val lines = wrap(visibleWords, style.maxWordsPerLine)
-        val display = if (style.anim == CaptionAnim.TYPEWRITER) {
+        val lines = wrap(visibleWords, capStyle.maxWordsPerLine)
+        val display = if (capStyle.anim == CaptionAnim.TYPEWRITER) {
             typewriter(lines, t)
         } else lines
 
-        val lineHeight = textPaint.fontSpacing * style.lineHeight
+        val lineHeight = textPaint.fontSpacing * capStyle.lineHeight
         val padH = 26f * scale
         val padV = 14f * scale
 
@@ -145,14 +145,14 @@ class CaptionOverlay(
         val canvas = Canvas(bmp)
 
         // Background plate
-        if (Color.alpha(style.backgroundColor.toInt()) > 0) {
-            val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = style.backgroundColor.toInt() }
-            val r = style.cornerRadius * scale
+        if (Color.alpha(capStyle.backgroundColor.toInt()) > 0) {
+            val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = capStyle.backgroundColor.toInt() }
+            val r = capStyle.cornerRadius * scale
             canvas.drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), r, r, bg)
         }
 
         // Karaoke fill: the highlight colour sweeps across the plate.
-        val karaokeEdge = if (style.anim == CaptionAnim.KARAOKE_FILL) w * t else -1f
+        val karaokeEdge = if (capStyle.anim == CaptionAnim.KARAOKE_FILL) w * t else -1f
 
         var baseline = padV - textPaint.fontMetrics.top
         for (line in display) {
@@ -166,10 +166,10 @@ class CaptionOverlay(
                 canvas.drawText(line, x, baseline, textPaint)
                 canvas.save()
                 canvas.clipRect(0f, 0f, karaokeEdge, h.toFloat())
-                val fill = Paint(textPaint).apply { color = style.highlightColor.toInt() }
+                val fill = Paint(textPaint).apply { color = capStyle.highlightColor.toInt() }
                 canvas.drawText(line, x, baseline, fill)
                 canvas.restore()
-            } else if (style.wordHighlight) {
+            } else if (capStyle.wordHighlight) {
                 drawHighlighted(canvas, line, x, baseline, textPaint, t)
             } else {
                 canvas.drawText(line, x, baseline, textPaint)
@@ -193,7 +193,7 @@ class CaptionOverlay(
         var x = startX
         val space = paint.measureText(" ")
         parts.forEachIndexed { i, word ->
-            val p = if (i == active) Paint(paint).apply { color = style.highlightColor.toInt() } else paint
+            val p = if (i == active) Paint(paint).apply { color = capStyle.highlightColor.toInt() } else paint
             canvas.drawText(word, x, baseline, p)
             x += paint.measureText(word) + space
         }
@@ -206,29 +206,29 @@ class CaptionOverlay(
     }
 
     private fun buildPaint(fill: Boolean): Paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textSize = style.sizeSp * scale
+        textSize = capStyle.sizeSp * scale
         typeface = Typeface.create(
-            mapFont(style.fontFamily),
-            if (style.fontWeight >= 600) Typeface.BOLD else Typeface.NORMAL
+            mapFont(capStyle.fontFamily),
+            if (capStyle.fontWeight >= 600) Typeface.BOLD else Typeface.NORMAL
         )
-        letterSpacing = style.letterSpacing
+        letterSpacing = capStyle.letterSpacing
         if (fill) {
             this.style = Paint.Style.FILL
-            color = style.textColor.toInt()
-            if (style.shadowRadius > 0f) {
+            color = capStyle.textColor.toInt()
+            if (capStyle.shadowRadius > 0f) {
                 setShadowLayer(
-                    style.shadowRadius * scale,
+                    capStyle.shadowRadius * scale,
                     0f,
-                    style.shadowRadius * 0.4f * scale,
-                    style.shadowColor.toInt()
+                    capStyle.shadowRadius * 0.4f * scale,
+                    capStyle.shadowColor.toInt()
                 )
             }
         } else {
             this.style = Paint.Style.STROKE
-            strokeWidth = style.strokeWidth * scale
+            strokeWidth = capStyle.strokeWidth * scale
             strokeJoin = Paint.Join.ROUND
             strokeCap = Paint.Cap.ROUND
-            color = style.strokeColor.toInt()
+            color = capStyle.strokeColor.toInt()
         }
     }
 
@@ -244,7 +244,7 @@ class CaptionOverlay(
         val n = perLine.coerceAtLeast(1)
         return words.chunked(n).map { chunk ->
             val joined = chunk.joinToString(" ")
-            if (style.allCaps) joined.uppercase() else joined
+            if (capStyle.allCaps) joined.uppercase() else joined
         }
     }
 
