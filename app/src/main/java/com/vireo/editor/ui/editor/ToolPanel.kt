@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.common.util.UnstableApi
 import com.vireo.editor.data.Clip
 import com.vireo.editor.data.FilterPreset
+import com.vireo.editor.data.AspectRatio
 import com.vireo.editor.data.PanZoom
 import com.vireo.editor.data.TransitionType
 import com.vireo.editor.ui.LabeledSlider
