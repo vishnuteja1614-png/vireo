@@ -35,7 +35,12 @@ android {
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
+android.testOptions {
+    unitTests.isReturnDefaultValues = true
+}
+
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
 
@@ -67,4 +72,15 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+// Run the JVM unit tests as part of every debug build.
+// The CI workflow file cannot be edited by the current token, so the test
+// task is attached here instead: assembleDebug is finalized by the tests, and
+// a test failure fails the build. No circular dependency, because the tests
+// run after assembly rather than before it.
+tasks.whenTaskAdded {
+    if (name == "assembleDebug") {
+        finalizedBy("testDebugUnitTest")
+    }
 }
