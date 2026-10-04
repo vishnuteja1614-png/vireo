@@ -28,7 +28,7 @@ import androidx.media3.common.util.UnstableApi
 import com.vireo.editor.data.*
 import com.vireo.editor.ui.theme.*
 
-enum class EditorTool { NONE, SPLIT, SPEED, FILTER, TEXT, AUDIO, TRANSITION, VOLUME, MOTION, COLOR, CHROMA, WIPE, CANVAS }
+enum class EditorTool { NONE, SPLIT, SPEED, FILTER, TEXT, AUDIO, TRANSITION, VOLUME, MOTION, COLOR, CHROMA, WIPE, CANVAS, FREEZE }
 
 @UnstableApi
 @Composable
@@ -51,6 +51,7 @@ fun EditorScreen(
     val canRedo by vm.canRedo.collectAsState()
 
     val selectedClip = project.clips.firstOrNull { it.id == selectedId }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
 
     Column(Modifier.fillMaxSize().background(Bg)) {
 
@@ -108,6 +109,20 @@ fun EditorScreen(
                     texts = project.texts,
                     styleId = project.captionStyleId,
                     playheadMs = playhead,
+                    modifier = Modifier.fillMaxSize()
+                )
+                // Finger control of the text: drag, pinch, twist.
+                val selectedTextId by vm.selectedTextId.collectAsState()
+                InteractiveTextLayer(
+                    texts = project.texts,
+                    playheadMs = playhead,
+                    selectedId = selectedTextId,
+                    onSelect = { vm.selectText(it) },
+                    onTransform = { id, dx, dy, zoom, rot ->
+                        vm.transformText(id, dx, dy, zoom, rot)
+                    },
+                    onGestureEnd = { vm.commitGesture() },
+                    onRequestEdit = { vm.selectText(it); tool = EditorTool.TEXT },
                     modifier = Modifier.fillMaxSize()
                 )
                 Box(Modifier.align(Alignment.TopEnd).padding(10.dp)) {
@@ -198,6 +213,15 @@ fun EditorScreen(
             RailItem(Icons.Filled.Transform, "Transition") { onOpenTransitions() }
             RailItem(Icons.Filled.Animation, "Wipe", tool == EditorTool.WIPE) { tool = toggle(tool, EditorTool.WIPE) }
             RailItem(Icons.Filled.AspectRatio, "Ratio", tool == EditorTool.CANVAS) { tool = toggle(tool, EditorTool.CANVAS) }
+            RailItem(Icons.Filled.AcUnit, "Freeze") {
+                // Grab the frame under the playhead and drop it in as a still.
+                val ok = vm.freezeFrame(ctx)
+                android.widget.Toast.makeText(
+                    ctx,
+                    if (ok) "Frame frozen and inserted" else "Could not read a frame here",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
             RailItem(Icons.Filled.ClosedCaption, "Captions") { onOpenCaptions() }
             RailItem(Icons.Filled.AutoAwesome, "AI") { onOpenAi() }
             RailItem(Icons.Filled.ContentCopy, "Duplicate") { selectedId?.let { vm.duplicateClip(it) } }

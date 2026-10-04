@@ -100,6 +100,98 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     // ---- timeline ops ----
     fun selectClip(id: String?) { _selectedClipId.value = id }
 
+    // ---- direct manipulation of text on the canvas ----
+
+    private val _selectedTextId = MutableStateFlow<String?>(null)
+    val selectedTextId: StateFlow<String?> = _selectedTextId.asStateFlow()
+
+    fun selectText(id: String?) { _selectedTextId.value = id }
+
+    /**
+     * Drag, pinch and twist in one update.
+     *
+     * Gestures arrive continuously, so this deliberately does NOT push an undo
+     * step per frame - that would flood the 50-step history and make undo
+     * useless. [commitGesture] records one step when the finger lifts.
+     */
+    fun transformText(id: String, dxFraction: Float, dyFraction: Float, zoom: Float, rotation: Float) {
+        _project.value = _project.value.copy(
+            texts = _project.value.texts.map { t ->
+                if (t.id != id) t else t.copy(
+                    xFraction = (t.xFraction + dxFraction).coerceIn(0f, 1f),
+                    yFraction = (t.yFraction + dyFraction).coerceIn(0f, 1f),
+                    sizeSp = (t.sizeSp * zoom).coerceIn(8f, 200f),
+                    rotationDeg = t.rotationDeg + rotation
+                )
+            }
+        )
+    }
+
+    /** Records a single undo step after a gesture finishes. */
+    fun commitGesture() = mutate { it }
+
+    /**
+     * Freeze the frame at the playhead and insert it as a still image clip.
+     *
+     * The frame is decoded with MediaMetadataRetriever and written to the
+     * cache as a PNG, then added to the timeline as a normal image clip, so
+     * every existing effect, filter and transition applies to it unchanged.
+     *
+     * @return true if a frame was captured
+     */
+    fun freezeFrame(context: android.content.Context, holdMs: Long = 2000L): Boolean {
+        val playhead = _playheadMs.value
+        // Find the clip under the playhead and convert to a source timestamp.
+        var acc = 0L
+        var target: Clip? = null
+        var offsetIntoClip = 0L
+        for (c in _project.value.clips) {
+            val d = c.outputDurationMs
+            if (playhead < acc + d) { target = c; offsetIntoClip = playhead - acc; break }
+            acc += d
+        }
+        val clip = target ?: _project.value.clips.lastOrNull() ?: return false
+        if (clip.media.kind == MediaKind.AUDIO) return false
+
+        val sourceUs = (clip.trimStartMs + offsetIntoClip * clip.speed) * 1000L
+
+        val bitmap = runCatching {
+            android.media.MediaMetadataRetriever().use { r ->
+                r.setDataSource(context, clip.media.uri)
+                r.getFrameAtTime(sourceUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST)
+            }
+        }.getOrNull() ?: return false
+
+        val file = java.io.File(context.cacheDir, "freeze_${System.currentTimeMillis()}.png")
+        runCatching {
+            java.io.FileOutputStream(file).use { out ->
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+            }
+        }.getOrElse { return false }
+
+        val frozen = Clip(
+            media = MediaItem(
+                uri = android.net.Uri.fromFile(file),
+                kind = MediaKind.IMAGE,
+                durationMs = holdMs,
+                name = "Freeze frame",
+                sizeBytes = file.length()
+            ),
+            trimStartMs = 0L,
+            trimEndMs = holdMs
+        )
+
+        // Insert directly after the clip it was taken from, like a desktop NLE.
+        val index = _project.value.clips.indexOfFirst { it.id == clip.id }
+        mutate { p ->
+            val list = p.clips.toMutableList()
+            list.add((index + 1).coerceIn(0, list.size), frozen)
+            p.copy(clips = list)
+        }
+        _selectedClipId.value = frozen.id
+        return true
+    }
+
     /** Start a clean timeline. Without this, every "new project" reused the old one. */
     fun newProject() {
         _project.value = Project()

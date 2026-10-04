@@ -101,7 +101,9 @@ data class TextOverlay(
     val colorArgb: Int = 0xFFFFFFFF.toInt(),
     val anim: TextAnim = TextAnim.FADE_IN,
     val style: String = "Neon",
-    val opacity: Float = 1f
+    val opacity: Float = 1f,
+    /** Free rotation applied by the two-finger twist gesture. */
+    val rotationDeg: Float = 0f
 )
 
 @Immutable
