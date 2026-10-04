@@ -28,7 +28,7 @@ import androidx.media3.ui.PlayerView
 import com.vireo.editor.data.*
 import com.vireo.editor.ui.theme.*
 
-enum class EditorTool { NONE, SPLIT, SPEED, FILTER, TEXT, AUDIO, TRANSITION, VOLUME, MOTION, COLOR, CHROMA }
+enum class EditorTool { NONE, SPLIT, SPEED, FILTER, TEXT, AUDIO, TRANSITION, VOLUME, MOTION, COLOR, CHROMA, WIPE }
 
 @UnstableApi
 @Composable
@@ -196,6 +196,7 @@ fun EditorScreen(
             RailItem(Icons.Filled.Contrast, "Green Screen", tool == EditorTool.CHROMA) { tool = toggle(tool, EditorTool.CHROMA) }
             RailItem(Icons.Filled.VolumeUp, "Volume", tool == EditorTool.VOLUME) { tool = toggle(tool, EditorTool.VOLUME) }
             RailItem(Icons.Filled.Transform, "Transition") { onOpenTransitions() }
+            RailItem(Icons.Filled.Animation, "Wipe", tool == EditorTool.WIPE) { tool = toggle(tool, EditorTool.WIPE) }
             RailItem(Icons.Filled.ClosedCaption, "Captions") { onOpenCaptions() }
             RailItem(Icons.Filled.AutoAwesome, "AI") { onOpenAi() }
             RailItem(Icons.Filled.ContentCopy, "Duplicate") { selectedId?.let { vm.duplicateClip(it) } }

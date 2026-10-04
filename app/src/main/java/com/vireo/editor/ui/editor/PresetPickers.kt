@@ -230,8 +230,21 @@ private fun ease(x: Float, e: Easing): Float = when (e) {
 fun CaptionStylePickerScreen(
     selectedId: String,
     onPick: (CaptionStyle) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    /** Receives the raw text of a chosen .srt/.vtt file. */
+    onImportSubtitles: (String) -> Unit = {}
 ) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            // Subtitle files are small; reading on the main thread is fine here.
+            runCatching {
+                ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            }.getOrNull()?.let(onImportSubtitles)
+        }
+    }
     var cat by remember { mutableStateOf<CaptionCategory?>(null) }
     val list = remember(cat) { cat?.let { CaptionStyles.byCategory(it) } ?: CaptionStyles.ALL }
 
@@ -240,6 +253,9 @@ fun CaptionStylePickerScreen(
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back", tint = TextHi) }
             Text("Caption Styles", color = TextHi, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
+            TextButton(onClick = {
+                picker.launch(arrayOf("application/x-subrip", "text/vtt", "text/plain", "*/*"))
+            }) { Text("Import SRT", color = Cyan, fontSize = 12.sp) }
             Text("${CaptionStyles.COUNT} styles", color = Cyan, fontSize = 12.sp,
                 modifier = Modifier.padding(end = 12.dp))
         }

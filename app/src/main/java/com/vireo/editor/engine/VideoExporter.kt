@@ -229,6 +229,17 @@ class VideoExporter(private val context: Context) {
         // Runs after Presentation so the geometry is expressed in output space.
         videoEffects += TransitionEffects.effectsFor(clip.transitionId, clip.transitionMs, clock)
 
+        // ---- luma wipe (MLT / OpenShot style shaped reveal) ----
+        LumaPattern.byId(clip.lumaWipeId)?.let { pattern ->
+            videoEffects += LumaWipeEffect(
+                pattern = pattern,
+                durationUs = clip.transitionMs * 1_000L,
+                clock = clock,
+                softness = clip.lumaSoftness,
+                invert = clip.lumaInvert
+            )
+        }
+
         // ---- burn in captions / text that fall inside this clip's window ----
         val clipEndMs = timelineStartMs + clip.outputDurationMs
         // byId() always resolves, falling back to the first preset.

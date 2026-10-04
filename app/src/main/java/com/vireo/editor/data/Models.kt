@@ -33,6 +33,11 @@ data class Clip(
     val transitionId: String = "none",
     val transitionMs: Long = 600L,
 
+    /** Name of a [com.vireo.editor.engine.LumaPattern], or "NONE". */
+    val lumaWipeId: String = "NONE",
+    val lumaSoftness: Float = 0.12f,
+    val lumaInvert: Boolean = false,
+
     // ---- framing ----
     /** Crop rectangle as 0..1 fractions of the source frame. */
     val cropLeft: Float = 0f,

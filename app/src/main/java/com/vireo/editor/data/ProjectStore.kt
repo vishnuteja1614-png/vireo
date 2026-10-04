@@ -97,6 +97,9 @@ class ProjectStore(context: Context) {
         put("brightness", brightness)
         put("contrast", contrast)
         put("saturation", saturation)
+        put("lumaWipeId", lumaWipeId)
+        put("lumaSoftness", lumaSoftness)
+        put("lumaInvert", lumaInvert)
         put("cropLeft", cropLeft)
         put("cropTop", cropTop)
         put("cropRight", cropRight)
@@ -134,6 +137,9 @@ class ProjectStore(context: Context) {
         brightness = optDouble("brightness", 0.0).toFloat(),
         contrast = optDouble("contrast", 0.0).toFloat(),
         saturation = optDouble("saturation", 1.0).toFloat(),
+        lumaWipeId = optString("lumaWipeId", "NONE"),
+        lumaSoftness = optDouble("lumaSoftness", 0.12).toFloat(),
+        lumaInvert = optBoolean("lumaInvert"),
         cropLeft = optDouble("cropLeft", 0.0).toFloat(),
         cropTop = optDouble("cropTop", 0.0).toFloat(),
         cropRight = optDouble("cropRight", 1.0).toFloat(),

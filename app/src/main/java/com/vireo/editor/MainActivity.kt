@@ -179,7 +179,11 @@ fun VireoApp() {
             CaptionStylePickerScreen(
                 selectedId = project.captionStyleId,
                 onPick = { st -> vm.setCaptionStyle(st.id); nav.popBackStack() },
-                onBack = { nav.popBackStack() }
+                onBack = { nav.popBackStack() },
+                onImportSubtitles = { raw ->
+                    val n = vm.importSubtitles(raw)
+                    if (n > 0) nav.popBackStack()
+                }
             )
         }
         composable("export") {

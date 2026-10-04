@@ -44,6 +44,7 @@ fun ToolPanel(clip: Clip, tool: EditorTool, vm: EditorViewModel, onClose: () -> 
                         EditorTool.MOTION -> "Crop & Motion"
                         EditorTool.COLOR -> "Colour Grade"
                         EditorTool.CHROMA -> "Green Screen"
+                        EditorTool.WIPE -> "Shaped Wipe"
                         else -> ""
                     },
                     color = TextHi, fontSize = 15.sp, fontWeight = FontWeight.SemiBold
@@ -115,6 +116,7 @@ fun ToolPanel(clip: Clip, tool: EditorTool, vm: EditorViewModel, onClose: () -> 
                 EditorTool.MOTION -> MotionPanel(clip, vm)
                 EditorTool.COLOR -> ColorPanel(clip, vm)
                 EditorTool.CHROMA -> ChromaPanel(clip, vm)
+                EditorTool.WIPE -> LumaWipePanel(clip, vm)
 
                 else -> Unit
             }
@@ -399,6 +401,55 @@ private val KEY_COLOURS = listOf(
 private val BACK_COLOURS = listOf(
     0x000000, 0xFFFFFF, 0x0A0A0C, 0x8B5CF6, 0x22D3EE, 0xEF4444, 0x34D399
 )
+
+
+/**
+ * Shaped "luma wipe" reveals, the mechanism MLT (Shotcut/Kdenlive) and
+ * libopenshot (OpenShot) use for their wipe transitions: a grayscale map plus
+ * a sweeping threshold and a softness value.
+ */
+@UnstableApi
+@Composable
+private fun LumaWipePanel(clip: Clip, vm: EditorViewModel) {
+    Text("Shape", color = TextLo, fontSize = 11.sp)
+    Spacer(Modifier.height(6.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        PresetChip("None", clip.lumaWipeId == "NONE") { vm.setLumaWipe(clip.id, "NONE") }
+        com.vireo.editor.engine.LumaPattern.entries.forEach { p ->
+            PresetChip(p.label, clip.lumaWipeId == p.name) { vm.setLumaWipe(clip.id, p.name) }
+        }
+    }
+
+    if (clip.lumaWipeId == "NONE") {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "A shaped wipe reveals the clip through a pattern - iris, clock, " +
+                "blinds, spiral - instead of simply cutting in.",
+            color = TextLo, fontSize = 11.sp
+        )
+        return
+    }
+
+    Spacer(Modifier.height(10.dp))
+    LabeledSlider("Edge softness", clip.lumaSoftness, 0f..0.6f,
+        if (clip.lumaSoftness < 0.02f) "sharp" else "${(clip.lumaSoftness * 100).toInt()}%") {
+        vm.setLumaTuning(clip.id, it, clip.lumaInvert)
+    }
+    LabeledSlider("Duration", clip.transitionMs / 1000f, 0.2f..3f,
+        "${"%.1f".format(clip.transitionMs / 1000f)}s") {
+        vm.setTransition(clip.id, clip.transitionIn, (it * 1000).toLong())
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Invert wipe", color = TextHi, fontSize = 13.sp)
+        Spacer(Modifier.weight(1f))
+        Switch(
+            checked = clip.lumaInvert,
+            onCheckedChange = { vm.setLumaTuning(clip.id, clip.lumaSoftness, it) },
+            colors = SwitchDefaults.colors(checkedTrackColor = Purple)
+        )
+    }
+}
 
 /** Swatches that read well burned over video. */
 private val TEXT_COLOURS = listOf(

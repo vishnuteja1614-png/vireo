@@ -182,6 +182,32 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     // ---- framing, colour and keying ----
     fun setPanZoom(id: String, p: PanZoom) = updateClip(id) { it.copy(panZoom = p) }
 
+    fun setLumaWipe(id: String, patternId: String) = updateClip(id) { it.copy(lumaWipeId = patternId) }
+
+    fun setLumaTuning(id: String, softness: Float, invert: Boolean) = updateClip(id) {
+        it.copy(lumaSoftness = softness.coerceIn(0f, 1f), lumaInvert = invert)
+    }
+
+    /** Replace all text overlays with cues parsed from an SRT/VTT file. */
+    fun importSubtitles(raw: String): Int {
+        val cues = SubtitleIo.parse(raw)
+        if (cues.isNotEmpty()) mutate { it.copy(texts = cues) }
+        return cues.size
+    }
+
+    /** Turn a script into timed caption cues spread across the timeline. */
+    fun captionsFromScript(script: String, wordsPerCue: Int = 4): Int {
+        val total = _project.value.totalDurationMs
+        val cues = SubtitleIo.fromScript(script, if (total > 0) total else 15_000L, wordsPerCue)
+        if (cues.isNotEmpty()) mutate { it.copy(texts = cues) }
+        return cues.size
+    }
+
+    fun subtitlesAsSrt(): String = SubtitleIo.toSrt(_project.value.texts)
+
+    fun shiftSubtitles(deltaMs: Long) =
+        mutate { it.copy(texts = SubtitleIo.shift(it.texts, deltaMs)) }
+
     fun setLut(id: String, lutId: String) = updateClip(id) { it.copy(lutId = lutId) }
 
     fun setCrop(id: String, l: Float, t: Float, r: Float, b: Float) = updateClip(id) {
