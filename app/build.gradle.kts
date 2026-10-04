@@ -37,6 +37,13 @@ android {
 
 android.testOptions {
     unitTests.isReturnDefaultValues = true
+    // Surface the scorecard printed by FeatureMatrixTest in the CI log.
+    unitTests.all {
+        it.testLogging {
+            showStandardStreams = true
+            events("passed", "failed", "skipped")
+        }
+    }
 }
 
 dependencies {
