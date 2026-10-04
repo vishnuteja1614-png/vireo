@@ -153,7 +153,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val clip = target ?: _project.value.clips.lastOrNull() ?: return false
         if (clip.media.kind == MediaKind.AUDIO) return false
 
-        val sourceUs = (clip.trimStartMs + offsetIntoClip * clip.speed) * 1000L
+        val sourceUs = ((clip.trimStartMs + offsetIntoClip * clip.speed).toLong()) * 1000L
 
         val bitmap = runCatching {
             android.media.MediaMetadataRetriever().use { r ->
