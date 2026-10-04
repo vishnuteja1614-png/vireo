@@ -264,15 +264,42 @@ private fun PlayerSurface(vm: EditorViewModel) {
     // rendered it. ExoPlayer accepts the same Effect list Transformer uses, so
     // preview and export now run through identical code.
     val selectedId by vm.selectedClipId.collectAsState()
-    val previewClip = project.clips.firstOrNull { it.id == selectedId } ?: project.clips.firstOrNull()
+
+    // setVideoEffects() applies to the whole player, not to one media item, so
+    // the effect list has to follow whichever clip is actually on screen.
+    // Keying it off the *selected* clip meant clip 1 rendered with clip 2's
+    // filter during playback. While playing we follow the player's current
+    // item; while paused we follow the selection so edits preview instantly.
+    var playingIndex by remember { mutableIntStateOf(0) }
+    DisposableEffect(player) {
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onMediaItemTransition(
+                mediaItem: androidx.media3.common.MediaItem?,
+                reason: Int
+            ) {
+                playingIndex = player.currentMediaItemIndex
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+
+    val previewClip = if (isPlaying) {
+        project.clips.getOrNull(playingIndex) ?: project.clips.firstOrNull()
+    } else {
+        project.clips.firstOrNull { it.id == selectedId } ?: project.clips.firstOrNull()
+    }
+
     val effectKey = previewClip?.let {
         listOf(
-            it.filter, it.lutId, it.panZoom, it.brightness, it.contrast, it.saturation,
+            it.id, it.filter, it.lutId, it.panZoom, it.brightness, it.contrast, it.saturation,
             it.cropLeft, it.cropTop, it.cropRight, it.cropBottom,
             it.chromaKey, it.chromaColorRgb, it.chromaBackRgb,
-            it.chromaSimilarity, it.chromaSmoothness, it.chromaSpill
+            it.chromaSimilarity, it.chromaSmoothness, it.chromaSpill,
+            it.lumaWipeId, it.lumaSoftness, it.lumaInvert
         )
     }
+
     LaunchedEffect(effectKey) {
         val clip = previewClip
         if (clip == null) {
@@ -282,9 +309,21 @@ private fun PlayerSurface(vm: EditorViewModel) {
             val effects = buildList {
                 addAll(com.vireo.editor.engine.MotionEffects.effectsFor(clip, clock))
                 addAll(com.vireo.editor.engine.FilterFactory.effectsFor(clip))
+                // Shaped wipe, so the reveal is visible before exporting.
+                com.vireo.editor.engine.LumaPattern.byId(clip.lumaWipeId)?.let { pattern ->
+                    add(
+                        com.vireo.editor.engine.LumaWipeEffect(
+                            pattern = pattern,
+                            durationUs = clip.transitionMs * 1_000L,
+                            clock = clock,
+                            softness = clip.lumaSoftness,
+                            invert = clip.lumaInvert
+                        )
+                    )
+                }
             }
-            // Some devices reject GL effects on the preview path; a failure here
-            // must never take down the editor.
+            // Some devices reject GL effects on the preview path; a failure
+            // here must never take down the editor.
             runCatching { player.setVideoEffects(effects) }
         }
     }
