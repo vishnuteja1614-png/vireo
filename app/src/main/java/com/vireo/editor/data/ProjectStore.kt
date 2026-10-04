@@ -62,6 +62,7 @@ class ProjectStore(context: Context) {
         put("id", id)
         put("name", name)
         put("aspect", aspect.name)
+        put("canvasBackRgb", canvasBackRgb)
         put("captionStyleId", captionStyleId)
         put("updatedAt", updatedAt)
         put("clips", JSONArray().also { a -> clips.forEach { a.put(it.toJson()) } })
@@ -72,6 +73,7 @@ class ProjectStore(context: Context) {
     private fun JSONObject.toProject(): Project = Project(
         id = optString("id"),
         name = optString("name", "Untitled Project"),
+        canvasBackRgb = optInt("canvasBackRgb", 0x000000),
         aspect = runCatching { AspectRatio.valueOf(optString("aspect")) }
             .getOrDefault(AspectRatio.R16_9),
         captionStyleId = optString("captionStyleId", "hormozi"),

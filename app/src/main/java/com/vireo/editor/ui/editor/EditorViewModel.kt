@@ -182,6 +182,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     // ---- framing, colour and keying ----
     fun setPanZoom(id: String, p: PanZoom) = updateClip(id) { it.copy(panZoom = p) }
 
+    fun setAspect(r: AspectRatio) = mutate { it.copy(aspect = r) }
+
+    fun setCanvasBack(rgb: Int) = mutate { it.copy(canvasBackRgb = rgb) }
+
     fun setLumaWipe(id: String, patternId: String) = updateClip(id) { it.copy(lumaWipeId = patternId) }
 
     fun setLumaTuning(id: String, softness: Float, invert: Boolean) = updateClip(id) {

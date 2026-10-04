@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,11 +25,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.ui.PlayerView
 import com.vireo.editor.data.*
 import com.vireo.editor.ui.theme.*
 
-enum class EditorTool { NONE, SPLIT, SPEED, FILTER, TEXT, AUDIO, TRANSITION, VOLUME, MOTION, COLOR, CHROMA, WIPE }
+enum class EditorTool { NONE, SPLIT, SPEED, FILTER, TEXT, AUDIO, TRANSITION, VOLUME, MOTION, COLOR, CHROMA, WIPE, CANVAS }
 
 @UnstableApi
 @Composable
@@ -86,7 +86,7 @@ fun EditorScreen(
                 .weight(1f)
                 .padding(horizontal = 12.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color.Black),
+                .background(Color(0xFF000000.toInt() or project.canvasBackRgb)),
             contentAlignment = Alignment.Center
         ) {
             if (project.clips.isEmpty()) {
@@ -197,6 +197,7 @@ fun EditorScreen(
             RailItem(Icons.Filled.VolumeUp, "Volume", tool == EditorTool.VOLUME) { tool = toggle(tool, EditorTool.VOLUME) }
             RailItem(Icons.Filled.Transform, "Transition") { onOpenTransitions() }
             RailItem(Icons.Filled.Animation, "Wipe", tool == EditorTool.WIPE) { tool = toggle(tool, EditorTool.WIPE) }
+            RailItem(Icons.Filled.AspectRatio, "Ratio", tool == EditorTool.CANVAS) { tool = toggle(tool, EditorTool.CANVAS) }
             RailItem(Icons.Filled.ClosedCaption, "Captions") { onOpenCaptions() }
             RailItem(Icons.Filled.AutoAwesome, "AI") { onOpenAi() }
             RailItem(Icons.Filled.ContentCopy, "Duplicate") { selectedId?.let { vm.duplicateClip(it) } }
@@ -231,53 +232,66 @@ private fun PlayerSurface(vm: EditorViewModel) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val project by vm.project.collectAsState()
     val isPlaying by vm.isPlaying.collectAsState()
+    val selectedId by vm.selectedClipId.collectAsState()
 
-    val player = remember {
-        androidx.media3.exoplayer.ExoPlayer.Builder(context).build()
-    }
+    val player = remember { androidx.media3.exoplayer.ExoPlayer.Builder(context).build() }
+
+    // Surfaced to the user instead of silently showing a black rectangle.
+    var playerError by remember { mutableStateOf<String?>(null) }
+    var effectsDisabled by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) { onDispose { player.release() } }
 
-    LaunchedEffect(project.clips.map { it.id to it.trimStartMs to it.trimEndMs }) {
+    // ---- media items ----
+    // Images need an explicit duration, otherwise ExoPlayer has no idea how
+    // long to show them and renders nothing at all - which is why a project
+    // built from photos previewed as a black screen while its audio played.
+    LaunchedEffect(project.clips.map { Triple(it.id, it.trimStartMs, it.trimEndMs) }) {
         player.clearMediaItems()
         project.clips.forEach { clip ->
-            player.addMediaItem(
-                androidx.media3.common.MediaItem.Builder()
-                    .setUri(clip.media.uri)
-                    .setClippingConfiguration(
-                        androidx.media3.common.MediaItem.ClippingConfiguration.Builder()
-                            .setStartPositionMs(clip.trimStartMs)
-                            .setEndPositionMs(clip.trimEndMs)
-                            .build()
-                    ).build()
-            )
+            val builder = androidx.media3.common.MediaItem.Builder().setUri(clip.media.uri)
+            if (clip.media.kind == MediaKind.IMAGE) {
+                builder.setImageDurationMs(clip.outputDurationMs.coerceAtLeast(1_000L))
+            } else {
+                builder.setClippingConfiguration(
+                    androidx.media3.common.MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(clip.trimStartMs)
+                        .setEndPositionMs(clip.trimEndMs)
+                        .build()
+                )
+            }
+            player.addMediaItem(builder.build())
         }
+        playerError = null
         player.prepare()
     }
 
     LaunchedEffect(isPlaying) { player.playWhenReady = isPlaying }
 
-    // ---- live effect preview ----
-    // Previously the preview showed raw decoded video: no filter, LUT, crop,
-    // pan/zoom or chroma key was ever attached to the player, so every colour
-    // and framing effect looked like it "did not apply" even though the export
-    // rendered it. ExoPlayer accepts the same Effect list Transformer uses, so
-    // preview and export now run through identical code.
-    val selectedId by vm.selectedClipId.collectAsState()
-
-    // setVideoEffects() applies to the whole player, not to one media item, so
-    // the effect list has to follow whichever clip is actually on screen.
-    // Keying it off the *selected* clip meant clip 1 rendered with clip 2's
-    // filter during playback. While playing we follow the player's current
-    // item; while paused we follow the selection so edits preview instantly.
+    // ---- which clip's effects are on screen ----
+    // setVideoEffects() applies to the whole player rather than to one item,
+    // so the list has to track the clip actually being rendered. While playing
+    // we follow the player; while paused we follow the selection so edits
+    // preview immediately.
     var playingIndex by remember { mutableIntStateOf(0) }
     DisposableEffect(player) {
         val listener = object : androidx.media3.common.Player.Listener {
             override fun onMediaItemTransition(
                 mediaItem: androidx.media3.common.MediaItem?,
                 reason: Int
-            ) {
-                playingIndex = player.currentMediaItemIndex
+            ) { playingIndex = player.currentMediaItemIndex }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                // A failing GL effect must not leave a dead black preview:
+                // drop the effects, retry once, and say so out loud.
+                if (!effectsDisabled) {
+                    effectsDisabled = true
+                    runCatching { player.setVideoEffects(emptyList()) }
+                    player.prepare()
+                    playerError = "Effects preview unavailable here - showing raw video."
+                } else {
+                    playerError = "Cannot preview this clip: ${error.errorCodeName}"
+                }
             }
         }
         player.addListener(listener)
@@ -296,20 +310,19 @@ private fun PlayerSurface(vm: EditorViewModel) {
             it.cropLeft, it.cropTop, it.cropRight, it.cropBottom,
             it.chromaKey, it.chromaColorRgb, it.chromaBackRgb,
             it.chromaSimilarity, it.chromaSmoothness, it.chromaSpill,
-            it.lumaWipeId, it.lumaSoftness, it.lumaInvert
+            it.lumaWipeId, it.lumaSoftness, it.lumaInvert, effectsDisabled
         )
     }
 
     LaunchedEffect(effectKey) {
         val clip = previewClip
-        if (clip == null) {
+        if (clip == null || effectsDisabled) {
             runCatching { player.setVideoEffects(emptyList()) }
         } else {
             val clock = com.vireo.editor.engine.ClipClock()
             val effects = buildList {
                 addAll(com.vireo.editor.engine.MotionEffects.effectsFor(clip, clock))
                 addAll(com.vireo.editor.engine.FilterFactory.effectsFor(clip))
-                // Shaped wipe, so the reveal is visible before exporting.
                 com.vireo.editor.engine.LumaPattern.byId(clip.lumaWipeId)?.let { pattern ->
                     add(
                         com.vireo.editor.engine.LumaWipeEffect(
@@ -322,8 +335,6 @@ private fun PlayerSurface(vm: EditorViewModel) {
                     )
                 }
             }
-            // Some devices reject GL effects on the preview path; a failure
-            // here must never take down the editor.
             runCatching { player.setVideoEffects(effects) }
         }
     }
@@ -335,14 +346,32 @@ private fun PlayerSurface(vm: EditorViewModel) {
         }
     }
 
-    AndroidView(
-        factory = { ctx ->
-            PlayerView(ctx).apply {
-                this.player = player
-                useController = false
-                setShutterBackgroundColor(android.graphics.Color.BLACK)
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // A TextureView, not PlayerView's default SurfaceView. A SurfaceView is
+        // composited in its own window layer, so it punches through and hides
+        // anything Compose draws above it - which is exactly why the live
+        // caption and text overlays never appeared over the video. A
+        // TextureView lives in the normal view hierarchy and can be drawn over.
+        AndroidView(
+            factory = { ctx ->
+                android.view.TextureView(ctx).also { player.setVideoTextureView(it) }
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .aspectRatio(project.aspect.w.toFloat() / project.aspect.h.toFloat())
+        )
+
+        playerError?.let { msg ->
+            Surface(
+                color = Color.Black.copy(alpha = 0.72f),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)
+            ) {
+                Text(
+                    msg, color = Accent, fontSize = 11.sp,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
             }
-        },
-        modifier = Modifier.fillMaxSize()
-    )
+        }
+    }
 }

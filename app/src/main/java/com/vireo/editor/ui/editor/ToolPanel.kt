@@ -45,6 +45,7 @@ fun ToolPanel(clip: Clip, tool: EditorTool, vm: EditorViewModel, onClose: () -> 
                         EditorTool.COLOR -> "Colour Grade"
                         EditorTool.CHROMA -> "Green Screen"
                         EditorTool.WIPE -> "Shaped Wipe"
+                        EditorTool.CANVAS -> "Canvas & Ratio"
                         else -> ""
                     },
                     color = TextHi, fontSize = 15.sp, fontWeight = FontWeight.SemiBold
@@ -117,6 +118,7 @@ fun ToolPanel(clip: Clip, tool: EditorTool, vm: EditorViewModel, onClose: () -> 
                 EditorTool.COLOR -> ColorPanel(clip, vm)
                 EditorTool.CHROMA -> ChromaPanel(clip, vm)
                 EditorTool.WIPE -> LumaWipePanel(clip, vm)
+                EditorTool.CANVAS -> CanvasPanel(vm)
 
                 else -> Unit
             }
@@ -450,6 +452,75 @@ private fun LumaWipePanel(clip: Clip, vm: EditorViewModel) {
         )
     }
 }
+
+
+/**
+ * Output aspect ratio and the fill shown behind letterboxed video.
+ *
+ * Every social platform wants a different shape, so this is a first-class
+ * control rather than something buried in the export screen: changing it
+ * reshapes the preview canvas immediately.
+ */
+@UnstableApi
+@Composable
+private fun CanvasPanel(vm: EditorViewModel) {
+    val project by vm.project.collectAsState()
+
+    Text("Aspect ratio", color = TextLo, fontSize = 11.sp)
+    Spacer(Modifier.height(6.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AspectRatio.entries.forEach { r ->
+            val on = project.aspect == r
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (on) Purple.copy(alpha = 0.22f) else Surface2)
+                    .border(1.dp, if (on) Purple else Stroke, RoundedCornerShape(10.dp))
+                    .clickable { vm.setAspect(r) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                // Miniature of the shape, so the choice is readable at a glance.
+                Box(
+                    Modifier
+                        .height(26.dp)
+                        .aspectRatio(r.w.toFloat() / r.h.toFloat())
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(if (on) Purple else Stroke)
+                )
+                Spacer(Modifier.height(5.dp))
+                Text(r.label, color = if (on) Purple else TextHi, fontSize = 10.sp)
+            }
+        }
+    }
+
+    Spacer(Modifier.height(14.dp))
+    Text("Background fill", color = TextLo, fontSize = 11.sp)
+    Spacer(Modifier.height(4.dp))
+    Text(
+        "Shown behind the video when it does not fill the chosen ratio.",
+        color = TextLo, fontSize = 10.sp
+    )
+    Spacer(Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        CANVAS_FILLS.forEach { rgb ->
+            val on = project.canvasBackRgb == rgb
+            Box(
+                Modifier
+                    .size(if (on) 30.dp else 24.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFF000000.toInt() or rgb))
+                    .border(if (on) 2.dp else 1.dp, if (on) Cyan else Stroke, RoundedCornerShape(50))
+                    .clickable { vm.setCanvasBack(rgb) }
+            )
+        }
+    }
+}
+
+private val CANVAS_FILLS = listOf(
+    0x000000, 0xFFFFFF, 0x0A0A0C, 0x1C1C22, 0x8B5CF6, 0x22D3EE, 0xF59E0B
+)
 
 /** Swatches that read well burned over video. */
 private val TEXT_COLOURS = listOf(

@@ -124,6 +124,8 @@ data class Project(
     val texts: List<TextOverlay> = emptyList(),
     val audio: List<AudioTrack> = emptyList(),
     val aspect: AspectRatio = AspectRatio.R16_9,
+    /** Fill drawn behind letterboxed video, as 0xRRGGBB. */
+    val canvasBackRgb: Int = 0x000000,
     val captionStyleId: String = "hormozi",
     val updatedAt: Long = System.currentTimeMillis()
 ) {
@@ -132,7 +134,7 @@ data class Project(
 
 enum class AspectRatio(val label: String, val w: Int, val h: Int) {
     R16_9("16:9", 16, 9), R9_16("9:16", 9, 16), R1_1("1:1", 1, 1),
-    R4_5("4:5", 4, 5), R4_3("4:3", 4, 3)
+    R4_5("4:5", 4, 5), R4_3("4:3", 4, 3), R21_9("21:9", 21, 9)
 }
 
 data class ExportSettings(
