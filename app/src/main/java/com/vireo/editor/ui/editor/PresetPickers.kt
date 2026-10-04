@@ -1,6 +1,17 @@
 package com.vireo.editor.ui.editor
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
+import com.vireo.editor.data.Easing
+import com.vireo.editor.data.TransitionDef
+import kotlin.math.pow
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -63,11 +74,7 @@ fun TransitionPickerScreen(
                         .padding(10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(8.dp))
-                        .background(BrandGradient), contentAlignment = Alignment.Center) {
-                        Text(t.label.take(2).uppercase(), color = Color.White,
-                            fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    }
+                    TransitionThumb(t, Modifier.fillMaxWidth().height(44.dp))
                     Spacer(Modifier.height(6.dp))
                     Text(t.label, color = if (sel) Purple else TextHi, fontSize = 10.sp,
                         maxLines = 1, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
@@ -75,6 +82,147 @@ fun TransitionPickerScreen(
                 }
             }
         }
+    }
+}
+
+
+/**
+ * Animated preview tile showing what a transition actually does.
+ *
+ * The grid previously rendered every preset as the same purple gradient with
+ * two letters on it, so "Slide Left" and "Dissolve" were visually identical and
+ * the only way to judge a preset was to apply it and export. This runs a small
+ * looping A-to-B demo using the same motion vocabulary the render engine uses,
+ * so Slide slides, Wipe wipes, Zoom zooms and Dissolve cross-fades.
+ */
+@Composable
+private fun TransitionThumb(def: TransitionDef, modifier: Modifier = Modifier) {
+    val loop = rememberInfiniteTransition(label = def.id)
+    val raw by loop.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "progress"
+    )
+    // Hold briefly at each end so the eye can read the result.
+    val p = ((raw - 0.15f) / 0.7f).coerceIn(0f, 1f)
+    val t = ease(p, def.easing)
+
+    val colorA = Color(0xFF3A3A46)
+    val colorB = Purple
+
+    Box(
+        modifier.clip(RoundedCornerShape(8.dp)).background(colorA),
+        contentAlignment = Alignment.Center
+    ) {
+        val rad = Math.toRadians((if (def.angle >= 0) def.angle else 0).toDouble())
+        val dirX = kotlin.math.cos(rad).toFloat()
+        val dirY = -kotlin.math.sin(rad).toFloat()
+
+        when (def.family) {
+            TransitionFamily.DISSOLVE, TransitionFamily.BLUR ->
+                Box(Modifier.fillMaxSize().alpha(t).background(colorB))
+
+            TransitionFamily.SLIDE, TransitionFamily.WIPE ->
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationX = (1f - t) * size.width * dirX
+                            translationY = (1f - t) * size.height * dirY
+                        }
+                        .background(colorB)
+                )
+
+            TransitionFamily.ZOOM, TransitionFamily.SHAPE ->
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { scaleX = t; scaleY = t; alpha = t }
+                        .background(colorB)
+                )
+
+            TransitionFamily.ROTATE, TransitionFamily.THREE_D, TransitionFamily.CREATIVE ->
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            rotationZ = (1f - t) * 180f
+                            scaleX = 0.4f + 0.6f * t
+                            scaleY = 0.4f + 0.6f * t
+                            alpha = t
+                        }
+                        .background(colorB)
+                )
+
+            TransitionFamily.LIGHT ->
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .alpha(t)
+                        .background(colorB)
+                ) {
+                    // Flash decays away as the incoming frame settles.
+                    Box(Modifier.fillMaxSize().alpha((1f - t).pow(2)).background(Color.White))
+                }
+
+            TransitionFamily.GLITCH ->
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationX = (1f - t) * 14f * kotlin.math.sin(t * 30f)
+                            alpha = t
+                        }
+                        .background(colorB)
+                )
+
+            TransitionFamily.DISTORT ->
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = 1f + (1f - t) * 0.9f
+                            scaleY = (0.35f + 0.65f * t)
+                            alpha = t
+                        }
+                        .background(colorB)
+                )
+        }
+
+        Text(
+            def.label.take(2).uppercase(),
+            color = Color.White.copy(alpha = 0.9f),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+private fun ease(x: Float, e: Easing): Float = when (e) {
+    Easing.LINEAR -> x
+    Easing.EASE_IN -> x * x * x
+    Easing.EASE_OUT -> 1f - (1f - x).pow(3)
+    Easing.EASE_IN_OUT -> if (x < 0.5f) 4f * x * x * x else 1f - (-2f * x + 2f).pow(3) / 2f
+    Easing.BACK -> {
+        val c1 = 1.70158f; val c3 = c1 + 1f
+        1f + c3 * (x - 1f).pow(3) + c1 * (x - 1f).pow(2)
+    }
+    Easing.BOUNCE -> {
+        val n1 = 7.5625f; val d1 = 2.75f
+        when {
+            x < 1f / d1 -> n1 * x * x
+            x < 2f / d1 -> { val v = x - 1.5f / d1; n1 * v * v + 0.75f }
+            x < 2.5f / d1 -> { val v = x - 2.25f / d1; n1 * v * v + 0.9375f }
+            else -> { val v = x - 2.625f / d1; n1 * v * v + 0.984375f }
+        }
+    }
+    Easing.ELASTIC -> if (x == 0f || x == 1f) x else {
+        val c4 = (2f * Math.PI.toFloat()) / 3f
+        2f.pow(-10f * x) * kotlin.math.sin((x * 10f - 0.75f) * c4) + 1f
     }
 }
 

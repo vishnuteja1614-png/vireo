@@ -102,6 +102,14 @@ fun EditorScreen(
                 }
             } else {
                 PlayerSurface(vm)
+                // Captions and text drawn live, using the project's caption
+                // style, so what you see here matches the burned-in export.
+                CaptionPreviewLayer(
+                    texts = project.texts,
+                    styleId = project.captionStyleId,
+                    playheadMs = playhead,
+                    modifier = Modifier.fillMaxSize()
+                )
                 Box(Modifier.align(Alignment.TopEnd).padding(10.dp)) {
                     Surface(color = Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(8.dp)) {
                         Text(
@@ -247,6 +255,38 @@ private fun PlayerSurface(vm: EditorViewModel) {
     }
 
     LaunchedEffect(isPlaying) { player.playWhenReady = isPlaying }
+
+    // ---- live effect preview ----
+    // Previously the preview showed raw decoded video: no filter, LUT, crop,
+    // pan/zoom or chroma key was ever attached to the player, so every colour
+    // and framing effect looked like it "did not apply" even though the export
+    // rendered it. ExoPlayer accepts the same Effect list Transformer uses, so
+    // preview and export now run through identical code.
+    val selectedId by vm.selectedClipId.collectAsState()
+    val previewClip = project.clips.firstOrNull { it.id == selectedId } ?: project.clips.firstOrNull()
+    val effectKey = previewClip?.let {
+        listOf(
+            it.filter, it.lutId, it.panZoom, it.brightness, it.contrast, it.saturation,
+            it.cropLeft, it.cropTop, it.cropRight, it.cropBottom,
+            it.chromaKey, it.chromaColorRgb, it.chromaBackRgb,
+            it.chromaSimilarity, it.chromaSmoothness, it.chromaSpill
+        )
+    }
+    LaunchedEffect(effectKey) {
+        val clip = previewClip
+        if (clip == null) {
+            runCatching { player.setVideoEffects(emptyList()) }
+        } else {
+            val clock = com.vireo.editor.engine.ClipClock()
+            val effects = buildList {
+                addAll(com.vireo.editor.engine.MotionEffects.effectsFor(clip, clock))
+                addAll(com.vireo.editor.engine.FilterFactory.effectsFor(clip))
+            }
+            // Some devices reject GL effects on the preview path; a failure here
+            // must never take down the editor.
+            runCatching { player.setVideoEffects(effects) }
+        }
+    }
 
     LaunchedEffect(player) {
         while (true) {
