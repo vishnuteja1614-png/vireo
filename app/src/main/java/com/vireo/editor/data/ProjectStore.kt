@@ -63,6 +63,7 @@ class ProjectStore(context: Context) {
         put("name", name)
         put("aspect", aspect.name)
         put("canvasBackRgb", canvasBackRgb)
+        put("canvasFill", canvasFill.name)
         put("captionStyleId", captionStyleId)
         put("updatedAt", updatedAt)
         put("clips", JSONArray().also { a -> clips.forEach { a.put(it.toJson()) } })
@@ -74,6 +75,8 @@ class ProjectStore(context: Context) {
         id = optString("id"),
         name = optString("name", "Untitled Project"),
         canvasBackRgb = optInt("canvasBackRgb", 0x000000),
+        canvasFill = runCatching { CanvasFill.valueOf(optString("canvasFill")) }
+            .getOrDefault(CanvasFill.CROP),
         aspect = runCatching { AspectRatio.valueOf(optString("aspect")) }
             .getOrDefault(AspectRatio.R16_9),
         captionStyleId = optString("captionStyleId", "hormozi"),

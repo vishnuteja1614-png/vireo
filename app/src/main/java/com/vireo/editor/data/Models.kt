@@ -124,12 +124,24 @@ data class Project(
     val texts: List<TextOverlay> = emptyList(),
     val audio: List<AudioTrack> = emptyList(),
     val aspect: AspectRatio = AspectRatio.R16_9,
+    /** How the frame is fitted to the canvas. */
+    val canvasFill: CanvasFill = CanvasFill.CROP,
     /** Fill drawn behind letterboxed video, as 0xRRGGBB. */
     val canvasBackRgb: Int = 0x000000,
     val captionStyleId: String = "hormozi",
     val updatedAt: Long = System.currentTimeMillis()
 ) {
     val totalDurationMs: Long get() = clips.sumOf { it.outputDurationMs }
+}
+
+/**
+ * How a clip is fitted into the project's aspect ratio.
+ *
+ * CROP fills the canvas and loses the edges; COLOR and BLUR fit the whole
+ * frame and paint the leftover bars.
+ */
+enum class CanvasFill(val label: String) {
+    CROP("Fill / Crop"), COLOR("Colour bars"), BLUR("Blurred background")
 }
 
 enum class AspectRatio(val label: String, val w: Int, val h: Int) {

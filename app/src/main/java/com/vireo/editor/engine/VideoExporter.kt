@@ -221,9 +221,22 @@ class VideoExporter(private val context: Context) {
             videoEffects += ScaleAndRotateTransformation.Builder()
                 .setRotationDegrees(clip.rotationDeg).build()
         }
-        videoEffects += Presentation.createForWidthAndHeight(
-            outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
-        )
+        // Canvas fit. CROP fills the frame but throws away the edges, so when
+        // the user has chosen a background fill we letterbox instead and paint
+        // the bars ourselves - flat colour, or a blurred copy of the frame.
+        videoEffects += when (project.canvasFill) {
+            CanvasFill.CROP -> Presentation.createForWidthAndHeight(
+                outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
+            )
+            CanvasFill.COLOR -> AspectFillEffect(
+                targetWidth = outW, targetHeight = outH,
+                mode = FillMode.COLOR, fillColorRgb = project.canvasBackRgb
+            )
+            CanvasFill.BLUR -> AspectFillEffect(
+                targetWidth = outW, targetHeight = outH,
+                mode = FillMode.BLUR, blurAmount = 0.035f
+            )
+        }
 
         // ---- transition in-animation for this clip ----
         // Runs after Presentation so the geometry is expressed in output space.

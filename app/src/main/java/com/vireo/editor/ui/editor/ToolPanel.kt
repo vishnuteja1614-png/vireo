@@ -24,6 +24,7 @@ import androidx.media3.common.util.UnstableApi
 import com.vireo.editor.data.Clip
 import com.vireo.editor.data.FilterPreset
 import com.vireo.editor.data.AspectRatio
+import com.vireo.editor.data.CanvasFill
 import com.vireo.editor.data.PanZoom
 import com.vireo.editor.data.TransitionType
 import com.vireo.editor.ui.LabeledSlider
@@ -493,6 +494,16 @@ private fun CanvasPanel(vm: EditorViewModel) {
                 Spacer(Modifier.height(5.dp))
                 Text(r.label, color = if (on) Purple else TextHi, fontSize = 10.sp)
             }
+        }
+    }
+
+    Spacer(Modifier.height(14.dp))
+    Text("Fit", color = TextLo, fontSize = 11.sp)
+    Spacer(Modifier.height(6.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        CanvasFill.entries.forEach { f ->
+            PresetChip(f.label, project.canvasFill == f) { vm.setCanvasFill(f) }
         }
     }
 
