@@ -168,6 +168,52 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Remove the background from the selected clip with on-device AI.
+     *
+     * No green screen needed. Rendered to a new file, so the original media
+     * is untouched and the result edits like any other clip.
+     */
+    fun removeBackgroundAi(
+        context: android.content.Context,
+        clipId: String,
+        backgroundRgb: Int = 0x000000,
+        onResult: (String) -> Unit
+    ) {
+        val clip = _project.value.clips.firstOrNull { it.id == clipId } ?: run {
+            onResult("Select a clip first"); return
+        }
+        viewModelScope.launch {
+            onResult("AI removing background...")
+            val result = com.vireo.editor.engine.AiBackgroundRemover.removeBackground(
+                context = context,
+                input = clip.media.uri,
+                trimStartMs = clip.trimStartMs,
+                trimEndMs = clip.trimEndMs,
+                backgroundRgb = backgroundRgb
+            )
+            result.fold(
+                onSuccess = { file ->
+                    val dur = clip.sourceDurationMs
+                    updateClip(clipId) {
+                        it.copy(
+                            media = it.media.copy(
+                                uri = android.net.Uri.fromFile(file),
+                                durationMs = dur,
+                                name = it.media.name + " (no bg)",
+                                sizeBytes = file.length()
+                            ),
+                            trimStartMs = 0L,
+                            trimEndMs = dur
+                        )
+                    }
+                    onResult("Background removed")
+                },
+                onFailure = { onResult(it.message ?: "Background removal failed") }
+            )
+        }
+    }
+
+    /**
      * Freeze the frame at the playhead and insert it as a still image clip.
      *
      * The frame is decoded with MediaMetadataRetriever and written to the

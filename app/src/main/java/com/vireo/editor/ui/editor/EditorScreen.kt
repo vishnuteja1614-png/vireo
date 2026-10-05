@@ -213,6 +213,16 @@ fun EditorScreen(
             RailItem(Icons.Filled.Transform, "Transition") { onOpenTransitions() }
             RailItem(Icons.Filled.Animation, "Wipe", tool == EditorTool.WIPE) { tool = toggle(tool, EditorTool.WIPE) }
             RailItem(Icons.Filled.AspectRatio, "Ratio", tool == EditorTool.CANVAS) { tool = toggle(tool, EditorTool.CANVAS) }
+            RailItem(Icons.Filled.AutoFixHigh, "AI Cutout") {
+                val id = selectedId
+                if (id == null) {
+                    android.widget.Toast.makeText(ctx, "Select a clip first", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    vm.removeBackgroundAi(ctx, id, project.canvasBackRgb) { msg ->
+                        android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
             RailItem(Icons.Filled.FastRewind, "Reverse") {
                 val id = selectedId
                 if (id == null) {

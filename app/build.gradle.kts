@@ -4,6 +4,8 @@ plugins {
 }
 
 android {
+    // TFLite models must stay uncompressed or the interpreter cannot mmap them.
+    androidResources { noCompress += listOf("tflite") }
     namespace = "com.vireo.editor"
     compileSdk = 34
 
@@ -57,6 +59,10 @@ dependencies {
     // "min" is the smallest variant and still carries the reverse, areverse,
     // setpts and atempo filters we need, which keeps the APK down.
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-min:8.1.7")
+
+    // MediaPipe Tasks Vision: on-device person segmentation for AI background
+    // removal. Runs entirely offline - no API key, no account, no upload.
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
 

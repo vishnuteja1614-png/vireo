@@ -122,6 +122,23 @@ object FfmpegEngine {
             runFfmpeg(cmd).map { out }
         }
 
+    /**
+     * Run an arbitrary command against a source URI.
+     *
+     * The URI is materialised to a real path first (FFmpeg cannot open
+     * content:// strings), then handed to [build] so callers can compose any
+     * filter graph they need without duplicating that plumbing.
+     */
+    suspend fun runRaw(
+        context: Context,
+        input: Uri,
+        build: (sourcePath: String) -> String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val source = resolveToFile(context, input)
+            ?: return@withContext Result.failure(IllegalStateException("Could not read the source media"))
+        runFfmpeg(build(source.absolutePath))
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private fun runFfmpeg(command: String): Result<Unit> {
