@@ -131,6 +131,43 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun commitGesture() = mutate { it }
 
     /**
+     * Reverse the selected clip.
+     *
+     * Media3 cannot do this, so FFmpeg pre-renders a reversed file and the
+     * clip is re-pointed at it. The original media is untouched.
+     */
+    fun reverseClip(context: android.content.Context, clipId: String, onResult: (String) -> Unit) {
+        val clip = _project.value.clips.firstOrNull { it.id == clipId } ?: run {
+            onResult("Select a clip first"); return
+        }
+        viewModelScope.launch {
+            onResult("Reversing...")
+            val result = com.vireo.editor.engine.FfmpegEngine.reverse(
+                context, clip.media.uri, clip.trimStartMs, clip.trimEndMs
+            )
+            result.fold(
+                onSuccess = { file ->
+                    val dur = clip.sourceDurationMs
+                    updateClip(clipId) {
+                        it.copy(
+                            media = it.media.copy(
+                                uri = android.net.Uri.fromFile(file),
+                                durationMs = dur,
+                                name = it.media.name + " (reversed)",
+                                sizeBytes = file.length()
+                            ),
+                            trimStartMs = 0L,
+                            trimEndMs = dur
+                        )
+                    }
+                    onResult("Clip reversed")
+                },
+                onFailure = { onResult(it.message ?: "Reverse failed") }
+            )
+        }
+    }
+
+    /**
      * Freeze the frame at the playhead and insert it as a still image clip.
      *
      * The frame is decoded with MediaMetadataRetriever and written to the

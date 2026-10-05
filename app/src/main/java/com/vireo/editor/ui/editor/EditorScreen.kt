@@ -213,6 +213,16 @@ fun EditorScreen(
             RailItem(Icons.Filled.Transform, "Transition") { onOpenTransitions() }
             RailItem(Icons.Filled.Animation, "Wipe", tool == EditorTool.WIPE) { tool = toggle(tool, EditorTool.WIPE) }
             RailItem(Icons.Filled.AspectRatio, "Ratio", tool == EditorTool.CANVAS) { tool = toggle(tool, EditorTool.CANVAS) }
+            RailItem(Icons.Filled.FastRewind, "Reverse") {
+                val id = selectedId
+                if (id == null) {
+                    android.widget.Toast.makeText(ctx, "Select a clip first", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    vm.reverseClip(ctx, id) { msg ->
+                        android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
             RailItem(Icons.Filled.AcUnit, "Freeze") {
                 // Grab the frame under the playhead and drop it in as a still.
                 val ok = vm.freezeFrame(ctx)

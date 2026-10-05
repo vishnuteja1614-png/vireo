@@ -48,6 +48,15 @@ android.testOptions {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+
+    // FFmpeg. Media3 has no reverse-playback path at all and cannot remux to
+    // arbitrary containers, so these features need a real FFmpeg build.
+    // The original com.arthenica artifacts were retired in Jan 2025 and pulled
+    // from Maven Central in April 2025; this is the maintained drop-in fork
+    // (same package, same API, SDK 35 and 16 KB page ready).
+    // "min" is the smallest variant and still carries the reverse, areverse,
+    // setpts and atempo filters we need, which keeps the APK down.
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-min:8.1.7")
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
 
