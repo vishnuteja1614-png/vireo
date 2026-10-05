@@ -214,6 +214,51 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Generate captions for the selected clip with offline speech recognition.
+     *
+     * Cues are placed at the clip's position on the timeline, so captions line
+     * up with the speech even when the clip is not first.
+     */
+    fun autoCaptions(
+        context: android.content.Context,
+        clipId: String,
+        onResult: (String) -> Unit
+    ) {
+        val p = _project.value
+        val clip = p.clips.firstOrNull { it.id == clipId } ?: run {
+            onResult("Select a clip first"); return
+        }
+        val offset = p.clips.takeWhile { it.id != clipId }.sumOf { it.outputDurationMs }
+        viewModelScope.launch {
+            onResult("Listening to the clip...")
+            val result = com.vireo.editor.engine.AutoCaptions.generate(
+                context = context,
+                input = clip.media.uri,
+                trimStartMs = clip.trimStartMs,
+                trimEndMs = clip.trimEndMs,
+                timelineOffsetMs = offset
+            )
+            result.fold(
+                onSuccess = { cues ->
+                    if (cues.isEmpty()) {
+                        onResult("No speech detected")
+                    } else {
+                        // Replace captions covering this clip, keep the rest.
+                        val clipEnd = offset + clip.outputDurationMs
+                        mutate { proj ->
+                            proj.copy(
+                                texts = proj.texts.filterNot { it.startMs in offset until clipEnd } + cues
+                            )
+                        }
+                        onResult("${cues.size} captions added")
+                    }
+                },
+                onFailure = { onResult(it.message ?: "Auto-captions failed") }
+            )
+        }
+    }
+
+    /**
      * Freeze the frame at the playhead and insert it as a still image clip.
      *
      * The frame is decoded with MediaMetadataRetriever and written to the

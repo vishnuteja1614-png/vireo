@@ -63,6 +63,13 @@ dependencies {
     // MediaPipe Tasks Vision: on-device person segmentation for AI background
     // removal. Runs entirely offline - no API key, no account, no upload.
     implementation("com.google.mediapipe:tasks-vision:0.10.14")
+
+    // Vosk: offline speech recognition with word-level timestamps, used for
+    // auto-captions. Chosen over Whisper/ONNX because Whisper on ONNX Runtime
+    // requires hand-written encoder/decoder loops and a tokenizer, whereas
+    // Vosk ships a real Android artifact and emits the per-word start/end
+    // times captions actually need. Runs offline - no API key, no upload.
+    implementation("com.alphacephei:vosk-android:0.3.47")
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
 
