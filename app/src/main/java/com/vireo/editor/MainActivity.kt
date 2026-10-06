@@ -147,7 +147,21 @@ fun VireoApp() {
                 onAddMedia = { vm.loadGallery(MediaKind.VIDEO); nav.navigate("picker") },
                 onOpenAi = { nav.navigate("ai") },
                 onOpenTransitions = { nav.navigate("transitions") },
-                onOpenCaptions = { nav.navigate("captions") }
+                onOpenCaptions = { nav.navigate("captions") },
+                onOpenAssets = { nav.navigate("assets") }
+            )
+        }
+        composable("assets") {
+            com.vireo.editor.ui.assets.AssetBrowserScreen(
+                onBack = { nav.popBackStack() },
+                onUseAudio = { file, title ->
+                    vm.addStockAudio(file, title)
+                    nav.popBackStack()
+                },
+                onUseImage = { file, title ->
+                    vm.addStockImage(file, title)
+                    nav.popBackStack()
+                }
             )
         }
         composable("ai") {

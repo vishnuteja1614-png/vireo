@@ -482,6 +482,37 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         addAudio(AudioTrack(media = item, isVoiceover = true))
     }
 
+    /**
+     * Add a track downloaded from the free online library. It is not a
+     * voiceover, so it keeps the normal music fades.
+     */
+    fun addStockAudio(file: java.io.File, title: String) {
+        val item = MediaItem(
+            uri = android.net.Uri.fromFile(file),
+            kind = MediaKind.AUDIO,
+            durationMs = 0L,
+            name = title,
+            sizeBytes = file.length()
+        )
+        addAudio(AudioTrack(media = item, isVoiceover = false))
+    }
+
+    /**
+     * Add a stock photo as a clip. Stills have no intrinsic length, so they
+     * get the same three seconds a gallery image would.
+     */
+    fun addStockImage(file: java.io.File, title: String) {
+        val item = MediaItem(
+            uri = android.net.Uri.fromFile(file),
+            kind = MediaKind.IMAGE,
+            durationMs = 3_000L,
+            name = title,
+            sizeBytes = file.length()
+        )
+        mutate { it.copy(clips = it.clips + Clip(media = item, trimEndMs = 3_000L)) }
+        _selectedClipId.value = _project.value.clips.lastOrNull()?.id
+    }
+
     /** Drop a batch of AI caption chunks onto the text track, evenly spaced. */
     fun applyCaptionChunks(chunks: List<String>) {
         if (chunks.isEmpty()) return

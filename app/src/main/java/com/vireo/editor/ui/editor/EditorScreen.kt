@@ -41,7 +41,8 @@ fun EditorScreen(
     onAddMedia: () -> Unit,
     onOpenAi: () -> Unit = {},
     onOpenTransitions: () -> Unit = {},
-    onOpenCaptions: () -> Unit = {}
+    onOpenCaptions: () -> Unit = {},
+    onOpenAssets: () -> Unit = {}
 ) {
     val project by vm.project.collectAsState()
     val playhead by vm.playheadMs.collectAsState()
@@ -277,6 +278,7 @@ fun EditorScreen(
                 ).show()
             }
             RailItem(Icons.Filled.ClosedCaption, "Captions") { onOpenCaptions() }
+            RailItem(Icons.Filled.LibraryMusic, "Free Library") { onOpenAssets() }
             RailItem(Icons.Filled.AutoAwesome, "AI") { onOpenAi() }
             RailItem(Icons.Filled.ContentCopy, "Duplicate") { selectedId?.let { vm.duplicateClip(it) } }
             RailItem(Icons.Filled.Delete, "Delete") { selectedId?.let { vm.deleteClip(it) } }
