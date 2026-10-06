@@ -7,10 +7,12 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -55,6 +57,9 @@ fun EditorScreen(
 
     Column(Modifier.fillMaxSize().background(Bg)) {
 
+        val isLandscape = androidx.compose.ui.platform.LocalConfiguration.current
+            .orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
         // ---------- top bar ----------
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
@@ -80,6 +85,203 @@ fun EditorScreen(
             ) { Text("Export", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
         }
 
+
+        if (isLandscape) {
+            // Landscape: the layout a desktop NLE uses. Preview on the left,
+            // the contextual panel docked on the right instead of sliding over
+            // the video, timeline full width underneath. A phone held sideways
+            // has the aspect ratio of an editing workstation, so stacking
+            // everything vertically wastes most of the screen.
+            Row(Modifier.fillMaxWidth().weight(1f)) {
+                Column(Modifier.weight(1.45f).fillMaxHeight()) {
+            // ---------- preview ----------
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = 12.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF000000.toInt() or project.canvasBackRgb)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (project.clips.isEmpty()) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.AddPhotoAlternate, null, tint = Stroke, modifier = Modifier.size(44.dp))
+                        Spacer(Modifier.height(10.dp))
+                        Text("Add media to begin", color = TextLo, fontSize = 13.sp)
+                        Spacer(Modifier.height(14.dp))
+                        Box(
+                            Modifier.clip(RoundedCornerShape(20.dp)).background(BrandGradient)
+                                .clickable { onAddMedia() }.padding(horizontal = 20.dp, vertical = 10.dp)
+                        ) { Text("Import", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+                    }
+                } else {
+                    PlayerSurface(vm)
+                    // Captions and text drawn live, using the project's caption
+                    // style, so what you see here matches the burned-in export.
+                    CaptionPreviewLayer(
+                        texts = project.texts,
+                        styleId = project.captionStyleId,
+                        playheadMs = playhead,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    // Finger control of the text: drag, pinch, twist.
+                    val selectedTextId by vm.selectedTextId.collectAsState()
+                    InteractiveTextLayer(
+                        texts = project.texts,
+                        playheadMs = playhead,
+                        selectedId = selectedTextId,
+                        onSelect = { vm.selectText(it) },
+                        onTransform = { id, dx, dy, zoom, rot ->
+                            vm.transformText(id, dx, dy, zoom, rot)
+                        },
+                        onGestureEnd = { vm.commitGesture() },
+                        onRequestEdit = { vm.selectText(it); tool = EditorTool.TEXT },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(Modifier.align(Alignment.TopEnd).padding(10.dp)) {
+                        Surface(color = Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(8.dp)) {
+                            Text(
+                                "${playhead.asTimecode(true)} / ${project.totalDurationMs.asTimecode(true)}",
+                                color = Color.White, fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ---------- transport ----------
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                IconButton(onClick = { vm.setPlayhead(0) }) {
+                    Icon(Icons.Filled.SkipPrevious, "Start", tint = TextHi)
+                }
+                Box(
+                    Modifier.size(48.dp).clip(RoundedCornerShape(24.dp)).background(BrandGradient)
+                        .clickable { vm.setPlaying(!isPlaying) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play",
+                        tint = Color.White, modifier = Modifier.size(26.dp))
+                }
+                IconButton(onClick = { vm.setPlayhead(project.totalDurationMs) }) {
+                    Icon(Icons.Filled.SkipNext, "End", tint = TextHi)
+                }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { zoom = (zoom / 1.4f).coerceAtLeast(0.3f) }) {
+                    Icon(Icons.Filled.ZoomOut, "Zoom out", tint = TextLo)
+                }
+                IconButton(onClick = { zoom = (zoom * 1.4f).coerceAtMost(6f) }) {
+                    Icon(Icons.Filled.ZoomIn, "Zoom in", tint = TextLo)
+                }
+            }
+
+                }
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(Surface1)
+                        .verticalScroll(rememberScrollState())
+                ) {
+            // ---------- contextual panel ----------
+            AnimatedVisibility(
+                visible = tool != EditorTool.NONE && selectedClip != null,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut()
+            ) {
+                selectedClip?.let { clip ->
+                    ToolPanel(clip, tool, vm) { tool = EditorTool.NONE }
+                }
+            }
+
+                }
+            }
+        // ---------- timeline ----------
+        Timeline(
+            project = project,
+            playheadMs = playhead,
+            selectedClipId = selectedId,
+            zoom = zoom,
+            onSeek = { vm.setPlayhead(it) },
+            onSelectClip = { vm.selectClip(it) },
+            onTrim = { id, s, e -> vm.setTrim(id, s, e) },
+            modifier = Modifier.height(170.dp)
+        )
+
+        // ---------- tool rail ----------
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(Surface1)
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = 6.dp, horizontal = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            RailItem(Icons.Filled.Add, "Add") { onAddMedia() }
+            RailItem(Icons.Filled.ContentCut, "Split") { vm.splitAtPlayhead() }
+            RailItem(Icons.Filled.Speed, "Speed", tool == EditorTool.SPEED) { tool = toggle(tool, EditorTool.SPEED) }
+            RailItem(Icons.Filled.FilterVintage, "Filter", tool == EditorTool.FILTER) { tool = toggle(tool, EditorTool.FILTER) }
+            RailItem(Icons.Filled.TextFields, "Text", tool == EditorTool.TEXT) {
+                if (vm.project.value.texts.isEmpty()) vm.addText()
+                tool = toggle(tool, EditorTool.TEXT)
+            }
+            RailItem(Icons.Filled.Crop, "Crop", tool == EditorTool.MOTION) { tool = toggle(tool, EditorTool.MOTION) }
+            RailItem(Icons.Filled.Palette, "Colour", tool == EditorTool.COLOR) { tool = toggle(tool, EditorTool.COLOR) }
+            RailItem(Icons.Filled.Contrast, "Green Screen", tool == EditorTool.CHROMA) { tool = toggle(tool, EditorTool.CHROMA) }
+            RailItem(Icons.Filled.VolumeUp, "Volume", tool == EditorTool.VOLUME) { tool = toggle(tool, EditorTool.VOLUME) }
+            RailItem(Icons.Filled.Transform, "Transition") { onOpenTransitions() }
+            RailItem(Icons.Filled.Animation, "Wipe", tool == EditorTool.WIPE) { tool = toggle(tool, EditorTool.WIPE) }
+            RailItem(Icons.Filled.AspectRatio, "Ratio", tool == EditorTool.CANVAS) { tool = toggle(tool, EditorTool.CANVAS) }
+            RailItem(Icons.Filled.ClosedCaption, "Auto Caption") {
+                val id = selectedId
+                if (id == null) {
+                    android.widget.Toast.makeText(ctx, "Select a clip first", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    vm.autoCaptions(ctx, id) { msg ->
+                        android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            RailItem(Icons.Filled.AutoFixHigh, "AI Cutout") {
+                val id = selectedId
+                if (id == null) {
+                    android.widget.Toast.makeText(ctx, "Select a clip first", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    vm.removeBackgroundAi(ctx, id, project.canvasBackRgb) { msg ->
+                        android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            RailItem(Icons.Filled.FastRewind, "Reverse") {
+                val id = selectedId
+                if (id == null) {
+                    android.widget.Toast.makeText(ctx, "Select a clip first", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    vm.reverseClip(ctx, id) { msg ->
+                        android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            RailItem(Icons.Filled.AcUnit, "Freeze") {
+                // Grab the frame under the playhead and drop it in as a still.
+                val ok = vm.freezeFrame(ctx)
+                android.widget.Toast.makeText(
+                    ctx,
+                    if (ok) "Frame frozen and inserted" else "Could not read a frame here",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+            RailItem(Icons.Filled.ClosedCaption, "Captions") { onOpenCaptions() }
+            RailItem(Icons.Filled.AutoAwesome, "AI") { onOpenAi() }
+            RailItem(Icons.Filled.ContentCopy, "Duplicate") { selectedId?.let { vm.duplicateClip(it) } }
+            RailItem(Icons.Filled.Delete, "Delete") { selectedId?.let { vm.deleteClip(it) } }
+        }
+        } else {
         // ---------- preview ----------
         Box(
             Modifier
@@ -257,6 +459,8 @@ fun EditorScreen(
             RailItem(Icons.Filled.ContentCopy, "Duplicate") { selectedId?.let { vm.duplicateClip(it) } }
             RailItem(Icons.Filled.Delete, "Delete") { selectedId?.let { vm.deleteClip(it) } }
         }
+        }
+
     }
 }
 
