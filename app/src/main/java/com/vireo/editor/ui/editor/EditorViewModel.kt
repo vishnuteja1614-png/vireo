@@ -366,6 +366,72 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Split the selected clip at the current playhead. */
+    // ---- three-way trimming ----
+
+    /**
+     * Mark-in / mark-out for a ripple cut. Null until the user sets them.
+     * They live here rather than in the UI so a tool-sheet rebuild cannot
+     * silently lose a half-set range.
+     */
+    private val _markInMs = MutableStateFlow<Long?>(null)
+    val markInMs: StateFlow<Long?> = _markInMs.asStateFlow()
+
+    private val _markOutMs = MutableStateFlow<Long?>(null)
+    val markOutMs: StateFlow<Long?> = _markOutMs.asStateFlow()
+
+    /** One-shot user feedback; the screen shows it and calls [clearToast]. */
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    fun clearToast() { _toast.value = null }
+    fun say(msg: String) { _toast.value = msg }
+
+    fun markIn() {
+        _markInMs.value = _playheadMs.value
+        _toast.value = "In point set"
+    }
+
+    fun markOut() {
+        _markOutMs.value = _playheadMs.value
+        _toast.value = "Out point set"
+    }
+
+    fun clearMarks() {
+        _markInMs.value = null
+        _markOutMs.value = null
+    }
+
+    /** Apply a [TrimOps] result, keeping the playhead inside the new length. */
+    private fun applyTrim(r: TrimOps.Result) {
+        if (!r.changed) { _toast.value = r.message; return }
+        mutate { it.copy(clips = r.clips) }
+        r.selectId?.let { id -> if (r.clips.any { it.id == id }) _selectedClipId.value = id }
+        _playheadMs.value = _playheadMs.value.coerceIn(0, _project.value.totalDurationMs)
+        _toast.value = r.message
+    }
+
+    /** Cut the head: everything before the playhead in this clip is discarded. */
+    fun trimLeftAtPlayhead() =
+        applyTrim(TrimOps.trimLeft(_project.value.clips, _playheadMs.value))
+
+    /** Cut the tail: everything after the playhead in this clip is discarded. */
+    fun trimRightAtPlayhead() =
+        applyTrim(TrimOps.trimRight(_project.value.clips, _playheadMs.value))
+
+    /**
+     * Ripple-delete the marked range and close the gap. Falls back to a clear
+     * instruction when the user has not marked both ends yet.
+     */
+    fun trimMiddleMarked() {
+        val a = _markInMs.value
+        val b = _markOutMs.value
+        if (a == null || b == null) {
+            _toast.value = "Set both In and Out points first"
+            return
+        }
+        applyTrim(TrimOps.trimMiddle(_project.value.clips, a, b))
+        clearMarks()
+    }
+
     fun splitAtPlayhead() {
         val p = _project.value
         var acc = 0L

@@ -50,6 +50,8 @@ android.testOptions {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // Unit tests cannot instantiate android.net.Uri; mock it instead.
+    testImplementation("org.mockito:mockito-core:5.12.0")
 
     // FFmpeg. Media3 has no reverse-playback path at all and cannot remux to
     // arbitrary containers, so these features need a real FFmpeg build.

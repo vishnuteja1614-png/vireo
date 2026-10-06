@@ -58,7 +58,20 @@ fun EditorScreen(
 
     Column(Modifier.fillMaxSize().background(Bg)) {
 
-        val isLandscape = androidx.compose.ui.platform.LocalConfiguration.current
+        val markIn by vm.markInMs.collectAsState()
+    val markOut by vm.markOutMs.collectAsState()
+
+    // One-shot feedback from trimming and other edits.
+    val toast by vm.toast.collectAsState()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(toast) {
+        toast?.let {
+            android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show()
+            vm.clearToast()
+        }
+    }
+
+    val isLandscape = androidx.compose.ui.platform.LocalConfiguration.current
             .orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
 
         // ---------- top bar ----------
@@ -225,6 +238,11 @@ fun EditorScreen(
         ) {
             RailItem(Icons.Filled.Add, "Add") { onAddMedia() }
             RailItem(Icons.Filled.ContentCut, "Split") { vm.splitAtPlayhead() }
+            RailItem(Icons.Filled.FirstPage, "Trim Left") { vm.trimLeftAtPlayhead() }
+            RailItem(Icons.Filled.LastPage, "Trim Right") { vm.trimRightAtPlayhead() }
+            RailItem(Icons.Filled.Flag, "Mark In", markIn != null) { vm.markIn() }
+            RailItem(Icons.Filled.AssistantPhoto, "Mark Out", markOut != null) { vm.markOut() }
+            RailItem(Icons.Filled.CropFree, "Cut Middle") { vm.trimMiddleMarked() }
             RailItem(Icons.Filled.Speed, "Speed", tool == EditorTool.SPEED) { tool = toggle(tool, EditorTool.SPEED) }
             RailItem(Icons.Filled.FilterVintage, "Filter", tool == EditorTool.FILTER) { tool = toggle(tool, EditorTool.FILTER) }
             RailItem(Icons.Filled.TextFields, "Text", tool == EditorTool.TEXT) {
@@ -277,7 +295,12 @@ fun EditorScreen(
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             }
-            RailItem(Icons.Filled.ClosedCaption, "Captions") { onOpenCaptions() }
+            RailItem(Icons.Filled.ClosedCaption, "Captions") {
+                // A caption has to attach to something; opening the style
+                // picker with no clip selected is the reported dead end.
+                if (project.clips.isEmpty()) vm.say("Add a clip first")
+                else onOpenCaptions()
+            }
             RailItem(Icons.Filled.LibraryMusic, "Free Library") { onOpenAssets() }
             RailItem(Icons.Filled.AutoAwesome, "AI") { onOpenAi() }
             RailItem(Icons.Filled.ContentCopy, "Duplicate") { selectedId?.let { vm.duplicateClip(it) } }
